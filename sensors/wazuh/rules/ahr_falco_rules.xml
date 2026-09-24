@@ -1,0 +1,29 @@
+<!-- Wazuh has native Suricata and Docker rules; only Falco needs a local map. -->
+<group name="ahr,falco,runtime_security,">
+  <rule id="100100" level="5">
+    <decoded_as>json</decoded_as>
+    <field name="source" type="pcre2">(?i)^(syscall|k8s_audit|plugin)$</field>
+    <field name="priority" type="pcre2">(?i)^(debug|informational|notice|warning|error|critical|alert|emergency)$</field>
+    <field name="rule" type="pcre2">.+</field>
+    <description>Falco $(priority): $(rule)</description>
+    <group>container,runtime_detection,</group>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100101" level="8">
+    <if_sid>100100</if_sid>
+    <field name="priority" type="pcre2">(?i)^(warning|error)$</field>
+    <description>Falco elevated $(priority): $(rule)</description>
+    <group>container,runtime_detection,</group>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100102" level="12">
+    <if_sid>100100</if_sid>
+    <field name="priority" type="pcre2">(?i)^(critical|alert|emergency)$</field>
+    <description>Falco high severity $(priority): $(rule)</description>
+    <group>container,runtime_detection,</group>
+    <options>no_full_log</options>
+  </rule>
+</group>
+

@@ -1,0 +1,189 @@
+%YAML 1.1
+---
+
+# AHR-IDPS Phase 2 Suricata configuration.
+# Live capture is selected on the command line by the Compose service. The
+# sensor shares only Nginx's network namespace and captures its two Docker veth
+# interfaces plus loopback, so client -> Nginx and Nginx -> DVWA are observable.
+suricata-version: "8.0"
+sensor-name: ahr-idps-suricata
+
+vars:
+  address-groups:
+    # Docker bridge networks use RFC1918 address space. Keeping HOME_NET broad
+    # avoids coupling rules to a Compose subnet that Docker allocates at runtime.
+    HOME_NET: "[10.0.0.0/8,172.16.0.0/12,192.168.0.0/16]"
+    EXTERNAL_NET: "any"
+    HTTP_SERVERS: "$HOME_NET"
+    SMTP_SERVERS: "$HOME_NET"
+    SQL_SERVERS: "$HOME_NET"
+    DNS_SERVERS: "$HOME_NET"
+    TELNET_SERVERS: "$HOME_NET"
+    AIM_SERVERS: "any"
+    DC_SERVERS: "$HOME_NET"
+    DNP3_SERVER: "$HOME_NET"
+    DNP3_CLIENT: "$HOME_NET"
+    MODBUS_CLIENT: "$HOME_NET"
+    MODBUS_SERVER: "$HOME_NET"
+    ENIP_CLIENT: "$HOME_NET"
+    ENIP_SERVER: "$HOME_NET"
+  port-groups:
+    HTTP_PORTS: "[80,8080]"
+    SHELLCODE_PORTS: "!80"
+    ORACLE_PORTS: 1521
+    SSH_PORTS: 22
+    DNP3_PORTS: 20000
+    MODBUS_PORTS: 502
+    FILE_DATA_PORTS: "[$HTTP_PORTS,110,143]"
+    FTP_PORTS: 21
+    GENEVE_PORTS: 6081
+    VXLAN_PORTS: 4789
+    TEREDO_PORTS: 3544
+    SIP_PORTS: "[5060,5061]"
+
+default-log-dir: /var/log/suricata
+default-rule-path: /var/lib/suricata/rules
+
+stats:
+  enabled: yes
+  interval: 8
+
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      # Synchronous writes make the acceptance probe and downstream tailers
+      # deterministic and avoid losing buffered lab evidence on container stop.
+      buffer-size: 0
+      community-id: yes
+      community-id-seed: 0
+      ethernet: yes
+      suricata-version: yes
+      pcap-file: false
+      xff:
+        enabled: yes
+        mode: extra-data
+        deployment: reverse
+        header: X-Forwarded-For
+      types:
+        - alert:
+            metadata:
+              app-layer: true
+              flow: true
+              rule:
+                metadata: true
+                raw: true
+                reference: true
+            tagged-packets: yes
+            verdict: yes
+        - http:
+            extended: yes
+            custom: [X-Forwarded-For, X-Request-ID]
+        - flow
+        - dns:
+            # Version 3 is the Suricata 8 default and keeps DNS objects
+            # consistent between standalone DNS and alert records.
+            version: 3
+            enabled: yes
+            requests: yes
+            responses: yes
+            formats: [detailed, grouped]
+        - tls:
+            extended: yes
+        # Stats remain available through the command socket, but are not put
+        # in EVE: their hundreds of counters exceed Wazuh's JSON field limit.
+
+logging:
+  default-log-level: notice
+  outputs:
+    - console:
+        enabled: yes
+        type: json
+    - file:
+        enabled: no
+    - syslog:
+        enabled: no
+
+# The service invokes --pcap with no device so all interfaces below are used.
+# Checksum validation is disabled because
+# packets observed inside a Docker veth namespace can be captured before the
+# kernel has completed checksum offload; this sensor is passive IDS only.
+pcap:
+  - interface: eth0
+    checksum-checks: no
+    promisc: no
+  - interface: eth1
+    checksum-checks: no
+    promisc: no
+  - interface: lo
+    checksum-checks: no
+    promisc: no
+
+app-layer:
+  protocols:
+    dns:
+      tcp:
+        enabled: yes
+        detection-ports:
+          dp: 53
+      udp:
+        enabled: yes
+        detection-ports:
+          dp: 53
+    http:
+      enabled: yes
+      libhtp:
+        default-config:
+          personality: IDS
+          request-body-limit: 100 KiB
+          response-body-limit: 100 KiB
+          request-body-minimal-inspect-size: 32 KiB
+          request-body-inspect-window: 4 KiB
+          response-body-minimal-inspect-size: 40 KiB
+          response-body-inspect-window: 16 KiB
+          response-body-decompress-layer-limit: 2
+          http-body-inline: auto
+          double-decode-path: no
+          double-decode-query: no
+    tls:
+      enabled: yes
+      detection-ports:
+        dp: 443
+      encryption-handling: track-only
+
+flow:
+  memcap: 64 MiB
+  hash-size: 32768
+  prealloc: 2048
+  emergency-recovery: 30
+
+stream:
+  memcap: 32 MiB
+  checksum-validation: no
+  inline: no
+  reassembly:
+    memcap: 64 MiB
+    depth: 1 MiB
+    toserver-chunk-size: 2560
+    toclient-chunk-size: 2560
+    randomize-chunk-size: yes
+
+host:
+  hash-size: 4096
+  prealloc: 1000
+  memcap: 16 MiB
+
+runmode: autofp
+host-mode: sniffer-only
+max-pending-packets: 1024
+default-packet-size: 1514
+
+unix-command:
+  enabled: yes
+  filename: /var/run/suricata/suricata-command.socket
+
+rule-files:
+  - base.rules
+  - generated.rules
+  - shadow.rules

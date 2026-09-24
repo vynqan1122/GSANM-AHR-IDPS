@@ -1,0 +1,10 @@
+{
+  "accuracy": 0.7817258883248731,
+  "baseline_mean_probability": 0.409577876329422,
+  "baseline_roc_auc": 0.8522775649212431,
+  "f1": 0.7034482758620689,
+  "graphsage_mean_probability": 0.4117065966129303,
+  "precision": 0.796875,
+  "recall": 0.6296296296296297,
+  "roc_auc": 0.8809067688378033
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "AHR-IDPS DVWA System",
+    "quality_profile": "showcase",
+    "viewBox": [1160, 760]
+  },
+  "components": [
+    { "id": "tester", "type": "external", "label": "DVWA Tester", "sublabel": "Browser on 127.0.0.1", "pos": [30, 320], "size": [140, 70], "tag": "authorized lab" },
+    { "id": "gateway", "type": "frontend", "label": "Nginx Gateway", "sublabel": "DVWA, API, dashboard", "pos": [200, 320], "size": [150, 70], "tag": "127.0.0.1:8080" },
+    { "id": "dvwa", "type": "backend", "label": "DVWA and MariaDB", "sublabel": "Vulnerable web target", "pos": [380, 320], "size": [160, 70], "tag": "internal only" },
+    { "id": "suricata", "type": "security", "label": "Suricata", "sublabel": "HTTP, flow, rule alerts", "pos": [200, 130], "size": [150, 70], "tag": "EVE JSON" },
+    { "id": "falco", "type": "security", "label": "Falco and Wazuh", "sublabel": "Runtime and SIEM alerts", "pos": [380, 130], "size": [160, 70], "tag": "JSON alerts" },
+    { "id": "collector", "type": "backend", "label": "Collector and Normalizer", "sublabel": "Read, validate, deduplicate", "pos": [560, 220], "size": [170, 70], "tag": "common schema" },
+    { "id": "stream", "type": "messagebus", "label": "Redis Streams", "sublabel": "Raw, normalized, predictions", "pos": [760, 220], "size": [150, 70], "tag": "event bus" },
+    { "id": "store", "type": "database", "label": "PostgreSQL", "sublabel": "Events and models", "pos": [760, 410], "size": [150, 70], "tag": "persistent state" },
+    { "id": "hybrid", "type": "security", "label": "Hybrid AI and Rules", "sublabel": "Network, log, graph, fusion", "pos": [560, 410], "size": [170, 70], "tag": "risk and incident" },
+    { "id": "dashboard", "type": "frontend", "label": "SOC Dashboard", "sublabel": "Monitor, investigate, manage", "pos": [970, 320], "size": [160, 70], "tag": "operator view" }
+  ],
+  "connections": [
+    { "from": "tester", "to": "gateway", "variant": "emphasis" },
+    { "from": "gateway", "to": "dvwa", "variant": "emphasis" },
+    { "from": "gateway", "to": "suricata", "variant": "security", "fromSide": "top", "toSide": "bottom" },
+    { "from": "suricata", "to": "collector", "variant": "security" },
+    { "from": "falco", "to": "collector", "variant": "security" },
+    { "from": "collector", "to": "stream", "variant": "emphasis" },
+    { "from": "stream", "to": "hybrid", "variant": "emphasis" },
+    { "from": "hybrid", "to": "store", "variant": "emphasis" },
+    { "from": "store", "to": "dashboard", "variant": "emphasis" }
+  ]
+}

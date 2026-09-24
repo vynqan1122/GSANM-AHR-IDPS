@@ -1,0 +1,3 @@
+# Deterministically generated rules are stored here only after validation.
+# Empty by design in Phase 2; no generated rule is active yet.
+

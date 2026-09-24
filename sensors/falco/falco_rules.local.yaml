@@ -1,0 +1,135 @@
+# AHR-IDPS Phase 2 runtime detections.
+#
+# These rules consume real syscall events from Falco's modern eBPF driver. They
+# intentionally target the DVWA image instead of every container on the host.
+# Tune the image list if the lab replaces the upstream DVWA image.
+
+- macro: ahr_successful_process_start
+  condition: evt.type in (execve, execveat) and evt.failed=false
+
+- macro: ahr_dvwa_container
+  condition: >
+    container.id != host and
+    container.image.repository in (ghcr.io/digininja/dvwa)
+
+- list: ahr_shell_binaries
+  items: [ash, bash, csh, dash, fish, ksh, sh, tcsh, zsh]
+
+- list: ahr_expected_dvwa_processes
+  items:
+    - apache2
+    - httpd
+    - php
+    - php-fpm
+    - docker-php-entr
+    - tini
+
+- rule: AHR Shell Spawned Inside Web Container
+  desc: Detect a shell process launched in the DVWA web application container.
+  condition: >
+    ahr_successful_process_start and ahr_dvwa_container and
+    proc.name in (ahr_shell_binaries)
+  output: >
+    Shell spawned inside AHR-IDPS web container |
+    evt_type=%evt.type user=%user.name user_uid=%user.uid user_loginuid=%user.loginuid
+    process=%proc.name proc_exepath=%proc.exepath parent=%proc.pname
+    command=%proc.cmdline terminal=%proc.tty exe_flags=%evt.arg.flags
+    container_id=%container.id container_name=%container.name
+    container_image=%container.image.repository:%container.image.tag
+  priority: WARNING
+  tags: [ahr-idps, phase2, container, process, shell, mitre_execution, T1059]
+
+- rule: AHR Unexpected Child Process In Web Container
+  desc: Detect a process outside the small DVWA runtime allowlist.
+  condition: >
+    ahr_successful_process_start and ahr_dvwa_container and
+    not proc.name in (ahr_expected_dvwa_processes) and
+    not proc.name in (ahr_shell_binaries)
+  output: >
+    Unexpected child process in AHR-IDPS web container |
+    evt_type=%evt.type user=%user.name user_uid=%user.uid user_loginuid=%user.loginuid
+    process=%proc.name proc_exepath=%proc.exepath parent=%proc.pname
+    command=%proc.cmdline terminal=%proc.tty exe_flags=%evt.arg.flags
+    container_id=%container.id container_name=%container.name
+    container_image=%container.image.repository:%container.image.tag
+  priority: WARNING
+  tags: [ahr-idps, phase2, container, process, mitre_execution, T1059]
+
+- rule: AHR Suspicious Executable In Web Container
+  desc: Detect execution from temporary or shared-memory paths in DVWA.
+  condition: >
+    ahr_successful_process_start and ahr_dvwa_container and
+    (proc.exepath startswith "/tmp/" or
+     proc.exepath startswith "/var/tmp/" or
+     proc.exepath startswith "/dev/shm/")
+  output: >
+    Suspicious executable launched from a writable path in AHR-IDPS web container |
+    evt_type=%evt.type user=%user.name user_uid=%user.uid user_loginuid=%user.loginuid
+    process=%proc.name proc_exepath=%proc.exepath parent=%proc.pname
+    command=%proc.cmdline terminal=%proc.tty exe_flags=%evt.arg.flags
+    container_id=%container.id container_name=%container.name
+    container_image=%container.image.repository:%container.image.tag
+  priority: ERROR
+  tags: [ahr-idps, phase2, container, process, filesystem, mitre_execution, T1059]
+
+- rule: AHR Sensitive Path Write In Web Container
+  desc: Detect a successful write-open below sensitive system paths in DVWA.
+  condition: >
+    ahr_dvwa_container and
+    evt.type in (open, openat, openat2, open_by_handle_at, creat) and
+    evt.is_open_write=true and evt.failed=false and
+    fd.typechar='f' and
+    (fd.name startswith "/etc/" or
+     fd.name startswith "/root/" or
+     fd.name startswith "/bin/" or
+     fd.name startswith "/sbin/" or
+     fd.name startswith "/usr/bin/" or
+     fd.name startswith "/usr/sbin/")
+  output: >
+    Sensitive path opened for writing in AHR-IDPS web container |
+    file=%fd.name evt_type=%evt.type user=%user.name user_uid=%user.uid
+    user_loginuid=%user.loginuid process=%proc.name proc_exepath=%proc.exepath
+    parent=%proc.pname command=%proc.cmdline terminal=%proc.tty
+    container_id=%container.id container_name=%container.name
+    container_image=%container.image.repository:%container.image.tag
+  priority: ERROR
+  tags: [ahr-idps, phase2, container, filesystem, mitre_persistence, T1505.003]
+
+- rule: AHR Unexpected Outbound Connection From Web Container
+  desc: >
+    Detect successful outbound TCP/UDP connections from DVWA except its normal
+    Apache-to-MariaDB path. The acceptance probe uses only the internal dvwa_db
+    network and never contacts an Internet address.
+  condition: >
+    ahr_dvwa_container and evt.type=connect and evt.failed=false and
+    fd.type in (ipv4, ipv6) and
+    not (proc.name=apache2 and fd.rport=3306)
+  output: >
+    Unexpected outbound connection from AHR-IDPS web container |
+    connection=%fd.name lport=%fd.lport rport=%fd.rport fd_type=%fd.type
+    fd_proto=%fd.l4proto evt_type=%evt.type user=%user.name user_uid=%user.uid
+    user_loginuid=%user.loginuid process=%proc.name proc_exepath=%proc.exepath
+    parent=%proc.pname command=%proc.cmdline terminal=%proc.tty
+    container_id=%container.id container_name=%container.name
+    container_image=%container.image.repository:%container.image.tag
+  priority: WARNING
+  tags: [ahr-idps, phase2, container, network, mitre_command_and_control, T1071]
+
+- rule: AHR Privilege Activity In Web Container
+  desc: >
+    Detect successful identity/capability/namespace changes or setting a setuid
+    or setgid bit in DVWA.
+  condition: >
+    ahr_dvwa_container and evt.failed=false and
+    ((evt.type in (setuid, setgid, setresuid, setresgid, capset, setns, unshare)) or
+     (evt.type in (chmod, fchmod, fchmodat) and
+      (evt.arg.mode contains "S_ISUID" or evt.arg.mode contains "S_ISGID")))
+  output: >
+    Privilege activity in AHR-IDPS web container |
+    evt_type=%evt.type evt_args=%evt.args file=%fd.name user=%user.name
+    user_uid=%user.uid user_loginuid=%user.loginuid process=%proc.name
+    proc_exepath=%proc.exepath parent=%proc.pname command=%proc.cmdline
+    terminal=%proc.tty container_id=%container.id container_name=%container.name
+    container_image=%container.image.repository:%container.image.tag
+  priority: ERROR
+  tags: [ahr-idps, phase2, container, privilege_escalation, mitre_privilege_escalation, T1548.001]

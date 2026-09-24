@@ -1,0 +1,2 @@
+"""Rule generator tests."""
+

@@ -1,0 +1,92 @@
+# Compose overlay for Phase 2 Suricata. Until this service is merged into the
+# root docker-compose.yml, run Compose with both files:
+#   docker compose --env-file .env -f docker-compose.yml \
+#     -f sensors/suricata/compose.fragment.yml up -d --wait suricata
+
+services:
+  suricata:
+    init: true
+    image: jasonish/suricata@sha256:581dca6c8cc8a8a2fafd3fff33368573b547b7600a22b21a18866da05727508f # 8.0.6
+    pull_policy: missing
+    restart: "no"
+    depends_on:
+      nginx:
+        condition: service_healthy
+        restart: true
+    # Sharing Nginx's namespace exposes the two real traffic legs to libpcap:
+    # loopback/host -> Nginx and Nginx -> DVWA. It does not expose host NICs.
+    network_mode: service:nginx
+    entrypoint:
+      - /bin/sh
+      - /opt/ahr-idps/suricata-entrypoint.sh
+    command:
+      - --pcap
+      - -k
+      - none
+    volumes:
+      - type: bind
+        source: ./sensors/suricata/suricata.yaml
+        target: /etc/suricata/suricata.yaml
+        read_only: true
+      - type: bind
+        source: ./sensors/suricata/rules
+        target: /var/lib/suricata/rules
+        read_only: true
+      - type: bind
+        source: ./sensors/suricata/scripts/suricata-entrypoint.sh
+        target: /opt/ahr-idps/suricata-entrypoint.sh
+        read_only: true
+      - type: volume
+        source: suricata_logs
+        target: /var/log/suricata
+    read_only: true
+    tmpfs:
+      - /var/run/suricata:size=1048576,mode=0750
+      - /tmp:size=16777216,mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      # NET_ADMIN, NET_RAW and SYS_NICE are the capabilities documented by
+      # OISF for container capture. The remaining capabilities let the root
+      # bootstrap fix volume ownership, preserve the bounded capture caps, and
+      # drop privileges; no privileged mode is used.
+      - CHOWN
+      - DAC_OVERRIDE
+      - NET_ADMIN
+      - NET_RAW
+      - SETGID
+      - SETPCAP
+      - SETUID
+      - SYS_NICE
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          test -f /var/log/suricata/eve.json &&
+          suricatasc -c uptime /var/run/suricata/suricata-command.socket
+          >/dev/null 2>&1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 30s
+    mem_limit: 768m
+    mem_reservation: 192m
+    cpus: 2.0
+    pids_limit: 512
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    labels:
+      com.ahr-idps.component: network-ids
+      com.ahr-idps.phase: "2"
+      com.ahr-idps.capture-scope: nginx-network-namespace
+
+volumes:
+  suricata_logs:
+    labels:
+      com.ahr-idps.data: suricata-eve

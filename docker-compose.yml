@@ -1,0 +1,259 @@
+name: ahr-idps
+
+x-service-defaults: &service-defaults
+  init: true
+  restart: "no"
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  nginx:
+    <<: *service-defaults
+    image: ${NGINX_IMAGE:?Set NGINX_IMAGE in .env}
+    depends_on:
+      dvwa:
+        condition: service_healthy
+        restart: true
+    ports:
+      - name: dvwa-http
+        target: 80
+        published: ${LAB_HTTP_PORT:-8080}
+        host_ip: 127.0.0.1
+        protocol: tcp
+        app_protocol: http
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx_logs:/var/log/ahr-idps
+    networks:
+      - ingress
+      - dvwa_front
+    read_only: true
+    cap_drop:
+      - NET_RAW
+    mem_limit: 256m
+    mem_reservation: 64m
+    cpus: 1.0
+    pids_limit: 128
+    tmpfs:
+      - /var/cache/nginx:uid=101,gid=101,mode=0750,size=67108864
+      - /var/run:uid=101,gid=101,mode=0750,size=1048576
+      - /tmp:uid=101,gid=101,mode=1777,size=16777216
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q -O /dev/null http://127.0.0.1/healthz
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    stop_grace_period: 10s
+    labels:
+      com.ahr-idps.component: reverse-proxy
+      com.ahr-idps.phase: "1"
+
+  dvwa:
+    <<: *service-defaults
+    image: ${DVWA_IMAGE:?Set DVWA_IMAGE in .env}
+    pull_policy: missing
+    depends_on:
+      mariadb:
+        condition: service_healthy
+        restart: true
+    environment:
+      DBMS: MySQL
+      DB_SERVER: mariadb
+      DB_DATABASE: ${DVWA_DB_NAME:?Set DVWA_DB_NAME in .env}
+      DB_USER: ${DVWA_DB_USER:?Set DVWA_DB_USER in .env}
+      DB_PASSWORD: ${DVWA_DB_PASSWORD:?Set DVWA_DB_PASSWORD in .env}
+      DB_PORT: "3306"
+      DEFAULT_SECURITY_LEVEL: ${DVWA_SECURITY_LEVEL:-low}
+      DEFAULT_LOCALE: ${DVWA_LOCALE:-en}
+      TZ: ${TZ:-UTC}
+    expose:
+      - "80"
+    networks:
+      - dvwa_front
+      - dvwa_db
+    healthcheck:
+      test:
+        - CMD
+        - php
+        - -r
+        - "exit(@file_get_contents('http://127.0.0.1/setup.php') === false ? 1 : 0);"
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    stop_grace_period: 20s
+    mem_limit: 768m
+    mem_reservation: 128m
+    cpus: 1.5
+    pids_limit: 256
+    labels:
+      com.ahr-idps.component: vulnerable-lab-target
+      com.ahr-idps.phase: "1"
+
+  mariadb:
+    <<: *service-defaults
+    image: ${MARIADB_IMAGE:?Set MARIADB_IMAGE in .env}
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Set MARIADB_ROOT_PASSWORD in .env}
+      MARIADB_DATABASE: ${DVWA_DB_NAME:?Set DVWA_DB_NAME in .env}
+      MARIADB_USER: ${DVWA_DB_USER:?Set DVWA_DB_USER in .env}
+      MARIADB_PASSWORD: ${DVWA_DB_PASSWORD:?Set DVWA_DB_PASSWORD in .env}
+      MARIADB_AUTO_UPGRADE: "1"
+      TZ: ${TZ:-UTC}
+    expose:
+      - "3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./infrastructure/mariadb/conf.d/ahr.cnf:/etc/mysql/conf.d/ahr.cnf:ro
+    networks:
+      - dvwa_db
+    cap_drop:
+      - NET_RAW
+    mem_limit: 1g
+    mem_reservation: 256m
+    cpus: 2.0
+    pids_limit: 512
+    healthcheck:
+      test:
+        - CMD
+        - healthcheck.sh
+        - --connect
+        - --innodb_initialized
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    stop_grace_period: 30s
+    labels:
+      com.ahr-idps.component: dvwa-database
+      com.ahr-idps.phase: "1"
+
+  postgres:
+    <<: *service-defaults
+    image: ${POSTGRES_IMAGE:?Set POSTGRES_IMAGE in .env}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:?Set POSTGRES_SUPERUSER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?Set POSTGRES_SUPERUSER_PASSWORD in .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+      AHR_DB_USER: ${AHR_DB_USER:?Set AHR_DB_USER in .env}
+      AHR_DB_PASSWORD: ${AHR_DB_PASSWORD:?Set AHR_DB_PASSWORD in .env}
+      TZ: ${TZ:-UTC}
+      PGTZ: ${TZ:-UTC}
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init/01-init-ahr.sh:/docker-entrypoint-initdb.d/01-init-ahr.sh:ro
+    networks:
+      - data
+    cap_drop:
+      - NET_RAW
+    mem_limit: 1g
+    mem_reservation: 256m
+    cpus: 2.0
+    pids_limit: 512
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD="$${AHR_DB_PASSWORD}"
+          psql --host=127.0.0.1 --username="$${AHR_DB_USER}"
+          --dbname="$${POSTGRES_DB}" --tuples-only --no-align
+          --command='SELECT 1;' 2>/dev/null | grep -qx '1'
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    stop_grace_period: 30s
+    shm_size: 128mb
+    labels:
+      com.ahr-idps.component: security-event-database
+      com.ahr-idps.phase: "1"
+
+  redis:
+    <<: *service-defaults
+    image: ${REDIS_IMAGE:?Set REDIS_IMAGE in .env}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      TZ: ${TZ:-UTC}
+    entrypoint:
+      - /bin/sh
+      - /opt/ahr-idps/redis-entrypoint.sh
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+      - ./infrastructure/redis/redis.conf:/opt/ahr-idps/redis.conf:ro
+      - ./infrastructure/redis/redis-entrypoint.sh:/opt/ahr-idps/redis-entrypoint.sh:ro
+    networks:
+      - data
+    cap_drop:
+      - NET_RAW
+    # Redis retains the lab event streams and needs headroom for RDB/AOF
+    # background rewrites; 512 MiB was insufficient once the retained stream
+    # grew beyond 100k keys.
+    mem_limit: 1g
+    mem_reservation: 128m
+    cpus: 1.0
+    pids_limit: 256
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          redis-cli ping 2>&1 | grep -q 'NOAUTH Authentication required' &&
+          REDISCLI_AUTH="$${REDIS_PASSWORD}"
+          redis-cli --no-auth-warning ping 2>/dev/null | grep -qx 'PONG'
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 10s
+    stop_grace_period: 20s
+    labels:
+      com.ahr-idps.component: event-bus
+      com.ahr-idps.phase: "1"
+
+networks:
+  ingress:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.host_binding_ipv4: 127.0.0.1
+    labels:
+      com.ahr-idps.zone: loopback-ingress
+  dvwa_front:
+    driver: bridge
+    internal: true
+    labels:
+      com.ahr-idps.zone: dvwa-front
+  dvwa_db:
+    driver: bridge
+    internal: true
+    labels:
+      com.ahr-idps.zone: dvwa-database
+  data:
+    driver: bridge
+    internal: true
+    labels:
+      com.ahr-idps.zone: platform-data
+
+volumes:
+  nginx_logs:
+    labels:
+      com.ahr-idps.data: nginx-access
+  mariadb_data:
+    labels:
+      com.ahr-idps.data: dvwa
+  postgres_data:
+    labels:
+      com.ahr-idps.data: security-events
+  redis_data:
+    labels:
+      com.ahr-idps.data: event-bus

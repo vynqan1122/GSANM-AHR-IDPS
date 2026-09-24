@@ -1,0 +1,123 @@
+# Phase 2 Wazuh manager-only overlay.
+#
+# This intentionally omits the Wazuh indexer and dashboard. The manager keeps
+# JSON alerts locally and accepts native host agents only through loopback.
+services:
+  wazuh-manager:
+    image: docker.io/wazuh/wazuh-manager:4.14.7@sha256:c364ef100ba40d501537b1668a5a72bba4c4fbcf39bbef6a02123ff221fc40d0
+    pull_policy: missing
+    hostname: wazuh-manager
+    restart: "no"
+    ports:
+      - name: wazuh-agent-events
+        target: 1514
+        published: 1514
+        host_ip: 127.0.0.1
+        protocol: tcp
+      - name: wazuh-agent-enrollment
+        target: 1515
+        published: 1515
+        host_ip: 127.0.0.1
+        protocol: tcp
+    networks:
+      - wazuh_agent
+    volumes:
+      - wazuh_api_configuration:/var/ossec/api/configuration
+      - wazuh_etc:/var/ossec/etc
+      - wazuh_logs:/var/ossec/logs
+      - wazuh_queue:/var/ossec/queue
+      - wazuh_var_multigroups:/var/ossec/var/multigroups
+      - wazuh_integrations:/var/ossec/integrations
+      - wazuh_active_response:/var/ossec/active-response/bin
+      - wazuh_agentless:/var/ossec/agentless
+      - wazuh_wodles:/var/ossec/wodles
+      - ./sensors/wazuh/manager/ossec.conf:/wazuh-config-mount/etc/ossec.conf:ro
+      - ./sensors/wazuh/rules/ahr_falco_rules.xml:/wazuh-config-mount/etc/rules/ahr_falco_rules.xml:ro
+      - ./sensors/wazuh/entrypoint-scripts:/entrypoint-scripts:ro
+      - suricata_logs:/var/log/suricata:ro
+      - falco_events:/var/log/falco:ro
+      # Docker API access is required by Wazuh's real Docker listener. A
+      # read-only bind does not make the Unix socket API read-only; see README.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    secrets:
+      - wazuh_registration_password
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          /var/ossec/bin/wazuh-control status 2>/dev/null |
+          grep -q 'wazuh-analysisd is running' &&
+          /var/ossec/bin/wazuh-control status 2>/dev/null |
+          grep -q 'wazuh-logcollector is running' &&
+          /var/ossec/bin/wazuh-control status 2>/dev/null |
+          grep -q 'wazuh-remoted is running' &&
+          /var/ossec/bin/wazuh-control status 2>/dev/null |
+          grep -q 'wazuh-modulesd is running' &&
+          /var/ossec/bin/wazuh-control status 2>/dev/null |
+          grep -q 'wazuh-authd is running' &&
+          /var/ossec/bin/wazuh-control status 2>/dev/null |
+          grep -q 'wazuh-db is running'
+      interval: 10s
+      timeout: 8s
+      retries: 18
+      start_period: 45s
+    stop_grace_period: 60s
+    mem_limit: 1536m
+    mem_reservation: 512m
+    cpus: 2.0
+    pids_limit: 768
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    labels:
+      com.ahr-idps.component: siem-manager
+      com.ahr-idps.phase: "2"
+      com.ahr-idps.topology: manager-only
+
+secrets:
+  wazuh_registration_password:
+    file: ./sensors/wazuh/secrets/authd.pass
+
+networks:
+  wazuh_agent:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.host_binding_ipv4: 127.0.0.1
+    labels:
+      com.ahr-idps.zone: wazuh-agent-loopback
+      com.ahr-idps.phase: "2"
+
+volumes:
+  wazuh_api_configuration:
+    labels:
+      com.ahr-idps.data: wazuh-api-configuration
+  wazuh_etc:
+    labels:
+      com.ahr-idps.data: wazuh-configuration
+  wazuh_logs:
+    labels:
+      com.ahr-idps.data: wazuh-alerts
+  wazuh_queue:
+    labels:
+      com.ahr-idps.data: wazuh-queue
+  wazuh_var_multigroups:
+    labels:
+      com.ahr-idps.data: wazuh-agent-groups
+  wazuh_integrations:
+    labels:
+      com.ahr-idps.data: wazuh-integrations
+  wazuh_active_response:
+    labels:
+      com.ahr-idps.data: wazuh-active-response
+  wazuh_agentless:
+    labels:
+      com.ahr-idps.data: wazuh-agentless
+  wazuh_wodles:
+    labels:
+      com.ahr-idps.data: wazuh-wodles

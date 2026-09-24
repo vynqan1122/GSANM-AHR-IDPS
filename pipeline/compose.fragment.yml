@@ -1,0 +1,143 @@
+x-pipeline-service: &pipeline-service
+  build:
+    context: .
+    dockerfile: pipeline/Dockerfile
+  image: ahr-idps/pipeline:phase3
+  pull_policy: build
+  init: true
+  restart: "no"
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  networks:
+    - data
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  collector:
+    <<: *pipeline-service
+    command:
+      - python
+      - -m
+      - collector.main
+    user: "0:0"
+    # Wazuh writes alerts as uid/gid 999 with mode 0640. The supplementary
+    # group grants read access without adding capabilities or write mounts.
+    group_add:
+      - "998"
+      - "999"
+    depends_on:
+      redis:
+        condition: service_healthy
+        restart: true
+    environment:
+      TZ: ${TZ:-UTC}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      RAW_STREAM: security.events.raw
+      CHECKPOINT_DIR: /var/lib/ahr-idps/collector
+      COLLECTOR_HEALTH_PATH: /var/lib/ahr-idps/collector/health.json
+      COLLECTOR_CONFIG: /opt/ahr-idps/pipeline/config.yml
+      COLLECTOR_SURICATA_PATH: /var/log/suricata/eve.json
+      COLLECTOR_FALCO_PATH: /var/log/falco/events.jsonl
+      COLLECTOR_WAZUH_PATH: /var/log/wazuh/alerts/alerts.json
+      COLLECTOR_NGINX_PATH: /var/log/ahr-nginx/access.jsonl
+      COLLECTOR_START_AT_END: "true"
+      COLLECTOR_DOCKER_EVENTS_ENABLED: "false"
+      COLLECTOR_SYSTEM_METRICS_ENABLED: "false"
+    volumes:
+      - ./pipeline/config.yml:/opt/ahr-idps/pipeline/config.yml:ro
+      - suricata_logs:/var/log/suricata:ro
+      - falco_events:/var/log/falco:ro
+      - wazuh_logs:/var/log/wazuh:ro
+      - nginx_logs:/var/log/ahr-nginx:ro
+      - collector_state:/var/lib/ahr-idps/collector
+    tmpfs:
+      - /tmp:uid=0,gid=0,mode=1777,size=67108864
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -m
+        - collector.health
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    stop_grace_period: 20s
+    mem_limit: 384m
+    mem_reservation: 96m
+    cpus: 1.0
+    pids_limit: 128
+    labels:
+      com.ahr-idps.component: event-collector
+      com.ahr-idps.phase: "3"
+
+  normalizer:
+    <<: *pipeline-service
+    command:
+      - python
+      - -m
+      - normalizer.normalizer
+    user: "65532:65532"
+    depends_on:
+      redis:
+        condition: service_healthy
+        restart: true
+      postgres:
+        condition: service_healthy
+        restart: true
+      collector:
+        condition: service_healthy
+        restart: true
+    environment:
+      TZ: ${TZ:-UTC}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      RAW_STREAM: security.events.raw
+      NORMALIZED_STREAM: security.events.normalized
+      DEAD_LETTER_STREAM: security.events.dead-letter
+      QUARANTINE_STREAM: security.events.quarantine
+      NORMALIZER_GROUP: normalizer
+      NORMALIZER_CONSUMER: normalizer-1
+      PIPELINE_CONFIG: /opt/ahr-idps/pipeline/config.yml
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${AHR_DB_USER:?Set AHR_DB_USER in .env}
+      POSTGRES_PASSWORD: ${AHR_DB_PASSWORD:?Set AHR_DB_PASSWORD in .env}
+      MIGRATIONS_DIR: /opt/ahr-idps/normalizer/migrations
+      NORMALIZER_HEARTBEAT_PATH: /tmp/normalizer-heartbeat
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700,size=67108864
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -m
+        - normalizer.health
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 20s
+    mem_limit: 384m
+    mem_reservation: 96m
+    cpus: 1.0
+    pids_limit: 128
+    labels:
+      com.ahr-idps.component: event-normalizer
+      com.ahr-idps.phase: "3"
+
+volumes:
+  collector_state:
+    labels:
+      com.ahr-idps.data: collector-checkpoints

@@ -1,0 +1,12 @@
+{
+  "embedding_model": "all-MiniLM-L6-v2-compatible-384",
+  "metrics": {
+    "accuracy": 0.5315315315315315,
+    "f1": 0.6687898089171974,
+    "precision": 0.5198019801980198,
+    "recall": 0.9375
+  },
+  "model_id": "log-minilm-iforest-mlp",
+  "training_rows": 222,
+  "version": "log-v1"
+}

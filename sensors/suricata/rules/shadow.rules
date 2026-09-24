@@ -1,0 +1,3 @@
+# Validated candidate rules in observation-only shadow mode are stored here.
+# Empty by design in Phase 2; shadow lifecycle begins in Phase 12.
+

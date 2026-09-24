@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "AHR-IDPS Dataset and AI Flow",
+    "quality_profile": "showcase",
+    "viewBox": [1070, 820],
+    "visual_preset": "signal-flow"
+  },
+  "stages": [
+    { "label": "DVWA scenarios" },
+    { "label": "Labeled events" },
+    { "label": "AI views" },
+    { "label": "Hybrid decision" },
+    { "label": "Operator outcome" }
+  ],
+  "nodes": [
+    { "id": "baseline", "type": "frontend", "label": "Baseline", "sublabel": "Normal browsing", "stage": 0, "row": 0, "tag": "benign" },
+    { "id": "web", "type": "security", "label": "Web Injection", "sublabel": "SQLi, XSS, command, LFI", "stage": 0, "row": 2, "tag": "attack" },
+    { "id": "auth", "type": "security", "label": "Auth Abuse", "sublabel": "Probe and failed logins", "stage": 0, "row": 4, "tag": "attack" },
+    { "id": "labels", "type": "database", "label": "Scenario Labels", "sublabel": "Scenario labels", "stage": 1, "row": 1, "tag": "no event leakage" },
+    { "id": "export", "type": "messagebus", "label": "Dataset Export", "sublabel": "Train, validation, test", "stage": 1, "row": 3, "tag": "split by scenario" },
+    { "id": "network", "type": "backend", "label": "Network AI", "sublabel": "Flow model", "stage": 2, "row": 0, "tag": "network score" },
+    { "id": "logs", "type": "backend", "label": "Log AI", "sublabel": "Log anomaly model", "stage": 2, "row": 2, "tag": "log score" },
+    { "id": "graph", "type": "backend", "label": "Graph AI", "sublabel": "Entity graph", "stage": 2, "row": 4, "tag": "graph score" },
+    { "id": "fusion", "type": "security", "label": "Fusion and Incident", "sublabel": "AI risk context", "stage": 3, "row": 2, "tag": "risk level" },
+    { "id": "operator", "type": "frontend", "label": "Dashboard Review", "sublabel": "Alert review", "stage": 4, "row": 2, "tag": "alert only" }
+  ],
+  "flows": [
+    { "from": "baseline", "to": "labels", "label": "benign", "classification": "scenario marker", "variant": "default", "route": "vertical-channel", "channelX": 170, "labelAt": [100, 210] },
+    { "from": "web", "to": "labels", "label": "web", "classification": "scenario marker", "variant": "security", "route": "vertical-channel", "channelX": 190, "labelAt": [100, 440] },
+    { "from": "auth", "to": "labels", "label": "auth", "classification": "scenario marker", "variant": "security", "route": "vertical-channel", "channelX": 210, "labelAt": [100, 680] },
+    { "from": "labels", "to": "export", "label": "labeled export", "classification": "scenario grouped", "variant": "emphasis", "route": "vertical-channel", "labelAt": [315, 700] },
+    { "from": "export", "to": "network", "label": "flow vectors", "classification": "train split", "variant": "emphasis", "route": "vertical-channel", "labelAt": [445, 200] },
+    { "from": "export", "to": "logs", "label": "log text", "classification": "train split", "variant": "emphasis", "route": "vertical-channel", "channelX": 445, "labelAt": [455, 428] },
+    { "from": "export", "to": "graph", "label": "event windows", "classification": "train split", "variant": "emphasis", "route": "vertical-channel", "labelAt": [445, 656] },
+    { "from": "network", "to": "fusion", "label": "network score", "classification": "realtime", "variant": "emphasis", "route": "vertical-channel", "labelAt": [650, 220] },
+    { "from": "logs", "to": "fusion", "label": "log score", "classification": "realtime", "variant": "emphasis", "route": "straight", "labelAt": [665, 340] },
+    { "from": "graph", "to": "fusion", "label": "graph score", "classification": "realtime", "variant": "emphasis", "route": "vertical-channel", "labelAt": [650, 545] },
+    { "from": "fusion", "to": "operator", "label": "review", "classification": "risk and incident", "variant": "security", "route": "straight", "labelAt": [855, 440] }
+  ]
+}

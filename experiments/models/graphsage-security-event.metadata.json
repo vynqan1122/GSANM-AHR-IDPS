@@ -1,0 +1,20 @@
+{
+  "device": "cpu",
+  "graph_artifact": "/opt/ahr-idps/datasets/graphs/phase8_training_graphs.jsonl",
+  "metrics": {
+    "accuracy": 0.7817258883248731,
+    "baseline_mean_probability": 0.409577876329422,
+    "baseline_roc_auc": 0.8522775649212431,
+    "f1": 0.7034482758620689,
+    "graphsage_mean_probability": 0.4117066562175751,
+    "precision": 0.796875,
+    "recall": 0.6296296296296297,
+    "roc_auc": 0.8809067688378033
+  },
+  "mode": "graph_window_classification",
+  "model_id": "graphsage-security-event",
+  "training_events": 250,
+  "training_graphs": 197,
+  "version": "graphsage-v1",
+  "window_seconds": 30
+}

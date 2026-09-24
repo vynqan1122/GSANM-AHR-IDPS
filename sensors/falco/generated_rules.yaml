@@ -1,0 +1,5 @@
+# Reserved for rules that complete the candidate -> validation -> shadow ->
+# active lifecycle in later phases. An empty YAML sequence is a valid Falco
+# rules file and, importantly, creates no synthetic detection.
+[]
+

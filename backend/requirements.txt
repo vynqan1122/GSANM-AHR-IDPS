@@ -1,0 +1,10 @@
+asyncpg==0.31.0
+fastapi==0.124.4
+httpx==0.28.1
+pydantic==2.13.4
+pyarrow==22.0.0
+redis==8.1.0
+SQLAlchemy==2.0.45
+uvicorn[standard]==0.38.0
+websockets==15.0.1
+pytest==9.1.1

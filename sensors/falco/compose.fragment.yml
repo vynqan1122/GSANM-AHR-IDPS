@@ -1,0 +1,65 @@
+# Merge this fragment into the project Compose model. It is kept separately
+# during the sensor integration work so Phase 1 remains independently testable.
+services:
+  falco:
+    image: docker.io/falcosecurity/falco:0.44.1-debian@sha256:85ad8559039c97f40d71f1491ef6a0d7c613f7ae9a530fea0a415a1644c09eb1
+    command:
+      - /bin/sh
+      - -ec
+      - >-
+        umask 022;
+        touch /var/log/falco/events.jsonl;
+        exec /usr/bin/falco
+    user: "0:0"
+    pid: host
+    network_mode: none
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - SYS_PTRACE
+    security_opt:
+      - no-new-privileges:false
+    read_only: true
+    environment:
+      SKIP_DRIVER_LOADER: "true"
+      HOST_ROOT: /host
+      FALCO_HOSTNAME: ahr-idps-docker-host
+    volumes:
+      - /sys/kernel/debug/tracing:/sys/kernel/tracing:ro
+      - /var/run/docker.sock:/host/var/run/docker.sock:ro
+      - /proc:/host/proc:ro
+      - /etc:/host/etc:ro
+      - ./sensors/falco/90-ahr-idps.yaml:/etc/falco/config.d/90-ahr-idps.yaml:ro
+      - ./sensors/falco/falco_rules.local.yaml:/etc/falco/rules.d/90-ahr-idps.yaml:ro
+      - ./sensors/falco/generated_rules.yaml:/etc/falco/rules.d/99-generated-rules.yaml:ro
+      - falco_events:/var/log/falco
+    tmpfs:
+      - /tmp:mode=1777,size=67108864
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - --show-error
+        - http://127.0.0.1:8765/healthz
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: "no"
+    stop_grace_period: 30s
+    mem_limit: 768m
+    mem_reservation: 128m
+    cpus: 1.5
+    pids_limit: 256
+    labels:
+      com.ahr-idps.component: runtime-security
+      com.ahr-idps.phase: "2"
+
+volumes:
+  falco_events:
+    labels:
+      com.ahr-idps.data: falco-events

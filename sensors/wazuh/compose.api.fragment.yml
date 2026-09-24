@@ -1,0 +1,8 @@
+services:
+  wazuh-manager:
+    ports:
+      - name: wazuh-manager-api
+        target: 55000
+        published: 55000
+        host_ip: 127.0.0.1
+        protocol: tcp

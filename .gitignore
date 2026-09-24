@@ -1,0 +1,25 @@
+.env
+.env.next.*
+.rotate-diagnostic.*
+sensors/wazuh/secrets/authd.pass
+*.log
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+Thumbs.db
+
+# Runtime data and later research artifacts
+evidence/
+datasets/raw/*
+datasets/processed/*
+datasets/labels/*
+datasets/graphs/*
+experiments/results/*
+
+!datasets/raw/.gitkeep
+!datasets/processed/.gitkeep
+!datasets/labels/.gitkeep
+!datasets/graphs/.gitkeep
+!experiments/results/.gitkeep

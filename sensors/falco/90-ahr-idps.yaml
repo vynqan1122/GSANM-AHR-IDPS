@@ -1,0 +1,47 @@
+# Falco 0.44.1 configuration overlay for AHR-IDPS.
+# The stock /etc/falco/falco.yaml loads /etc/falco/config.d after its defaults.
+
+engine:
+  kind: modern_ebpf
+  modern_ebpf:
+    cpus_for_each_buffer: 2
+    buf_size_preset: 4
+    drop_failed_exit: false
+
+time_format_iso_8601: true
+priority: debug
+json_output: true
+json_include_output_property: true
+json_include_message_property: true
+json_include_output_fields_property: true
+json_include_tags_property: true
+buffered_outputs: false
+
+# A syscall can legitimately satisfy an upstream Falco rule and an AHR-IDPS
+# rule. Evaluate all matches so an upstream first match cannot shadow the
+# project-specific alert (for example, execution from /tmp).
+rule_matching: all
+
+stdout_output:
+  enabled: true
+
+syslog_output:
+  enabled: false
+
+file_output:
+  enabled: true
+  keep_alive: true
+  filename: /var/log/falco/events.jsonl
+
+webserver:
+  enabled: true
+  threadiness: 1
+  listen_port: 8765
+  listen_address: 127.0.0.1
+  k8s_healthz_endpoint: /healthz
+  prometheus_metrics_enabled: false
+  ssl_enabled: false
+
+log_stderr: true
+log_syslog: false
+log_level: info

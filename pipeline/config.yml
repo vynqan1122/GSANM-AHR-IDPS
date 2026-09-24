@@ -1,0 +1,35 @@
+schema_version: 1
+
+streams:
+  raw: security.events.raw
+  normalized: security.events.normalized
+  predictions: security.predictions
+  incidents: security.incidents
+  rules: security.rules
+  responses: security.responses
+  quarantine: security.events.quarantine
+
+consumer_groups:
+  - normalizer
+  - feature-engine
+  - ai-network
+  - ai-log
+  - graph-builder
+  - fusion-engine
+  - incident-engine
+  - dashboard-publisher
+
+storage:
+  raw_event_retention_days: 30
+  normalized_event_retention_days: 90
+  cleanup_enabled: false
+
+collector:
+  poll_interval_seconds: 0.5
+  redis_retry_seconds: 2
+  start_at_end_for_new_files: true
+  sources:
+    suricata: /var/log/suricata/eve.json
+    falco: /var/log/falco/events.jsonl
+    wazuh: /var/log/wazuh/alerts/alerts.json
+    nginx: /var/log/ahr-nginx/access.jsonl

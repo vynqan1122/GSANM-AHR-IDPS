@@ -1,0 +1,398 @@
+services:
+  ai-network:
+    build:
+      context: .
+      dockerfile: ai/Dockerfile
+    image: ahr-idps/ai-network:phase6
+    pull_policy: build
+    init: true
+    restart: "no"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - python
+      - -m
+      - ai.network.infer
+    user: "65532:65532"
+    networks:
+      - data
+    environment:
+      TZ: ${TZ:-UTC}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${AHR_DB_USER:?Set AHR_DB_USER in .env}
+      POSTGRES_PASSWORD: ${AHR_DB_PASSWORD:?Set AHR_DB_PASSWORD in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      NORMALIZED_STREAM: security.events.normalized
+      PREDICTIONS_STREAM: security.predictions
+      NETWORK_AI_GROUP: ai-network
+      NETWORK_AI_CONSUMER: ai-network-1
+      NETWORK_MODEL_PATH: /opt/ahr-idps/experiments/models/network-xgboost.json
+      NETWORK_AI_HEARTBEAT: /tmp/network-ai-heartbeat.json
+    volumes:
+      - ./experiments/models:/opt/ahr-idps/experiments/models
+      - ./datasets:/opt/ahr-idps/datasets
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700,size=67108864
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -s /tmp/network-ai-heartbeat.json
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 20s
+    mem_limit: 1g
+    mem_reservation: 256m
+    cpus: 2.0
+    pids_limit: 192
+    labels:
+      com.ahr-idps.component: network-ai
+      com.ahr-idps.phase: "6"
+
+  ai-log:
+    build:
+      context: .
+      dockerfile: ai/Dockerfile
+    image: ahr-idps/ai-network:phase6
+    pull_policy: build
+    init: true
+    restart: "no"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - python
+      - -m
+      - ai.logs.infer
+    user: "65532:65532"
+    networks:
+      - data
+    environment:
+      TZ: ${TZ:-UTC}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${AHR_DB_USER:?Set AHR_DB_USER in .env}
+      POSTGRES_PASSWORD: ${AHR_DB_PASSWORD:?Set AHR_DB_PASSWORD in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      NORMALIZED_STREAM: security.events.normalized
+      PREDICTIONS_STREAM: security.predictions
+    volumes:
+      - ./experiments/models:/opt/ahr-idps/experiments/models
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700,size=67108864
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -s /tmp/log-ai-heartbeat.json
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 20s
+    mem_limit: 1g
+    mem_reservation: 256m
+    cpus: 2.0
+    pids_limit: 192
+    labels:
+      com.ahr-idps.component: log-ai
+      com.ahr-idps.phase: "7"
+
+  graph-builder:
+    build:
+      context: .
+      dockerfile: ai/Dockerfile
+    image: ahr-idps/ai-network:phase6
+    pull_policy: build
+    init: true
+    restart: "no"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - python
+      - -m
+      - ai.graph.infer
+    user: "65532:65532"
+    networks:
+      - data
+    environment:
+      TZ: ${TZ:-UTC}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${AHR_DB_USER:?Set AHR_DB_USER in .env}
+      POSTGRES_PASSWORD: ${AHR_DB_PASSWORD:?Set AHR_DB_PASSWORD in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      NORMALIZED_STREAM: security.events.normalized
+      PREDICTIONS_STREAM: security.predictions
+      GRAPH_AI_GROUP: graph-builder
+      GRAPH_AI_CONSUMER: graph-builder-1
+      GRAPH_MODEL_PATH: /opt/ahr-idps/experiments/models/graphsage-security-event.joblib
+      GRAPH_WINDOW_SECONDS: "30"
+      GRAPH_AI_HEARTBEAT: /tmp/graph-ai-heartbeat.json
+    volumes:
+      - ./experiments/models:/opt/ahr-idps/experiments/models
+      - ./datasets:/opt/ahr-idps/datasets
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700,size=67108864
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -s /tmp/graph-ai-heartbeat.json
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 20s
+    mem_limit: 1g
+    mem_reservation: 256m
+    cpus: 2.0
+    pids_limit: 192
+    labels:
+      com.ahr-idps.component: graph-ai
+      com.ahr-idps.phase: "8"
+
+  fusion-engine:
+    build:
+      context: .
+      dockerfile: ai/Dockerfile
+    image: ahr-idps/ai-network:phase6
+    pull_policy: build
+    init: true
+    restart: "no"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - python
+      - -m
+      - ai.fusion.infer
+    user: "65532:65532"
+    networks:
+      - data
+    environment:
+      TZ: ${TZ:-UTC}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${AHR_DB_USER:?Set AHR_DB_USER in .env}
+      POSTGRES_PASSWORD: ${AHR_DB_PASSWORD:?Set AHR_DB_PASSWORD in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      NORMALIZED_STREAM: security.events.normalized
+      PREDICTIONS_STREAM: security.predictions
+      FUSION_GROUP: fusion-engine
+      FUSION_CONSUMER: fusion-engine-1
+      FUSION_START_AT_END: "true"
+      FUSION_MODEL_PATH: /opt/ahr-idps/experiments/models/fusion-hybrid-xgboost.json
+      FUSION_HEARTBEAT: /tmp/fusion-heartbeat.json
+    volumes:
+      - ./experiments/models:/opt/ahr-idps/experiments/models
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700,size=67108864
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -s /tmp/fusion-heartbeat.json
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 20s
+    mem_limit: 1g
+    mem_reservation: 256m
+    cpus: 2.0
+    pids_limit: 192
+    labels:
+      com.ahr-idps.component: fusion-engine
+      com.ahr-idps.phase: "9"
+
+  incident-engine:
+    build:
+      context: .
+      dockerfile: ai/Dockerfile
+    image: ahr-idps/ai-network:phase6
+    pull_policy: build
+    init: true
+    restart: "no"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - python
+      - -m
+      - correlation.correlator
+    user: "65532:65532"
+    networks:
+      - data
+    environment:
+      TZ: ${TZ:-UTC}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${AHR_DB_USER:?Set AHR_DB_USER in .env}
+      POSTGRES_PASSWORD: ${AHR_DB_PASSWORD:?Set AHR_DB_PASSWORD in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      NORMALIZED_STREAM: security.events.normalized
+      PREDICTIONS_STREAM: security.predictions
+      INCIDENT_STREAM: security.incidents
+      INCIDENT_GROUP: incident-engine
+      INCIDENT_CONSUMER: incident-engine-1
+      INCIDENT_START_AT_END: "true"
+      INCIDENT_HEARTBEAT: /tmp/incident-heartbeat.json
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700,size=67108864
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -s /tmp/incident-heartbeat.json
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 20s
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
+    pids_limit: 160
+    labels:
+      com.ahr-idps.component: incident-engine
+      com.ahr-idps.phase: "10"
+
+  rule-generator:
+    build:
+      context: .
+      dockerfile: ai/Dockerfile
+    image: ahr-idps/ai-network:phase6
+    pull_policy: build
+    init: true
+    restart: "no"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - python
+      - -m
+      - rule_engine.generator
+    user: "65532:65532"
+    networks:
+      - data
+    environment:
+      TZ: ${TZ:-UTC}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${AHR_DB_USER:?Set AHR_DB_USER in .env}
+      POSTGRES_PASSWORD: ${AHR_DB_PASSWORD:?Set AHR_DB_PASSWORD in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      NORMALIZED_STREAM: security.events.normalized
+      PREDICTIONS_STREAM: security.predictions
+      RULEGEN_MIN_SUPPORT: "5"
+      RULEGEN_MIN_CONFIDENCE: "0.85"
+      RULEGEN_WINDOW_MINUTES: "60"
+      RULEGEN_INTERVAL_SECONDS: "300"
+      RULEGEN_HEARTBEAT: /tmp/rulegen-heartbeat.json
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700,size=67108864
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -s /tmp/rulegen-heartbeat.json
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 20s
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: 1.0
+    pids_limit: 160
+    labels:
+      com.ahr-idps.component: rule-generator
+      com.ahr-idps.phase: "11"
+
+  response-engine:
+    build:
+      context: .
+      dockerfile: ai/Dockerfile
+    image: ahr-idps/ai-network:phase6
+    pull_policy: build
+    init: true
+    restart: "no"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - python
+      - -m
+      - response.engine
+      - --daemon
+    user: "65532:65532"
+    networks:
+      - data
+    environment:
+      TZ: ${TZ:-UTC}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${AHR_DB_USER:?Set AHR_DB_USER in .env}
+      POSTGRES_PASSWORD: ${AHR_DB_PASSWORD:?Set AHR_DB_PASSWORD in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      AHR_RESPONSE_MODE: alert_only
+      AHR_RESPONSE_AUTOMATIC_BLOCK: "false"
+      AHR_RESPONSE_AUTOMATIC_CONTAINER_ISOLATION: "false"
+      AHR_EVIDENCE_ROOT: /opt/ahr-idps/evidence
+      RESPONSE_HEARTBEAT: /tmp/response-heartbeat.json
+      RESPONSE_INTERVAL_SECONDS: "60"
+    volumes:
+      - ./evidence:/opt/ahr-idps/evidence
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700,size=67108864
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -s /tmp/response-heartbeat.json
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    stop_grace_period: 20s
+    mem_limit: 256m
+    mem_reservation: 64m
+    cpus: 0.5
+    pids_limit: 96
+    labels:
+      com.ahr-idps.component: response-engine
+      com.ahr-idps.phase: "13"
