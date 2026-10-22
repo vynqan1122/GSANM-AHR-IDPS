@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Network,
   Activity,
@@ -16,13 +16,17 @@ import type { NetworkSummaryData } from '../types/api';
 export function NetworkPage() {
   const [data, setData] = useState<NetworkSummaryData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const requestInFlight = useRef(false);
 
   const loadNetwork = () => {
+    if(requestInFlight.current) return;
+    requestInFlight.current = true;
     setIsLoading(true);
     getJson<NetworkSummaryData>('/api/network/summary')
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setIsLoading(false));
+      .then((next) => { setData(next); setError(''); })
+      .catch(() => setError('Không tải được dữ liệu mới. Đang giữ bản gần nhất; bấm Làm mới để thử lại.'))
+      .finally(() => {setIsLoading(false);requestInFlight.current=false;});
   };
 
   useEffect(() => {
@@ -32,11 +36,10 @@ export function NetworkPage() {
   }, []);
 
   const summary = data?.summary || {};
-  const flowsPerSec = summary.flows_per_sec ? summary.flows_per_sec.toFixed(1) : '0.0';
-  const bytesPerSec = summary.bytes_per_sec
-    ? (summary.bytes_per_sec / 1024).toFixed(1) + ' KB/s'
-    : '0 KB/s';
-  const suricataAlerts = summary.suricata_alerts ?? 0;
+  const numeric = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
+  const flowsPerSec = numeric(summary.flows_per_sec).toFixed(1);
+  const bytesPerSec = (numeric(summary.bytes_per_sec)/1024).toFixed(1)+' KB/s';
+  const suricataAlerts = numeric(summary.suricata_alerts);
 
   return (
     <div className="soc-page-container">
@@ -49,7 +52,7 @@ export function NetworkPage() {
               PHÂN TÍCH LƯU LƯỢNG MẠNG & SURICATA NETWORK IDS
             </h2>
             <p className="banner-desc">
-              Giám sát gói tin, Network Flows, phân bổ giao thức và phát hiện các mẫu tấn công mạng trên cổng HTTP (80) & MySQL (3306).
+              Dữ liệu Suricata quan sát tại Nginx. Tốc độ tính từ flow kết thúc trong phút gần nhất; biểu đồ phân bố và tổng alert dùng toàn bộ lịch sử thu thập.
             </p>
           </div>
         </div>
@@ -65,20 +68,23 @@ export function NetworkPage() {
         </div>
       </div>
 
+      {error && <p role="alert">{error}</p>}
+      {isLoading && !data && <p role="status">Đang tải dữ liệu Suricata…</p>}
+
       {/* KPI Cards */}
       <div className="soc-cards-grid">
         <StatCard
           label="TỐC ĐỘ LUỒNG (FLOWS/SEC)"
           value={flowsPerSec}
           icon={<ArrowDownUp size={18} />}
-          subtext="Luồng kết nối TCP/UDP song song"
+          subtext="Flow records/giây · trung bình 1 phút"
           variant="cyan"
         />
         <StatCard
           label="BĂNG THÔNG MẠNG (THROUGHPUT)"
           value={bytesPerSec}
           icon={<Activity size={18} />}
-          subtext="Lưu lượng truyền tải thời gian thực"
+          subtext="Byte từ flow hoàn tất · trung bình 1 phút"
           variant="emerald"
         />
         <StatCard
@@ -110,8 +116,8 @@ export function NetworkPage() {
           </div>
           <BarList
             items={(data?.protocols || []).map((p) => ({
-              label: p.protocol.toUpperCase(),
-              value: p.count,
+              label: String(p.protocol || 'chưa rõ').toUpperCase(),
+              value: numeric(p.count),
             }))}
             colorVariant="cyan"
           />
@@ -135,7 +141,7 @@ export function NetworkPage() {
               else if (p.dst_port === 6379) portName = 'Port 6379 (Redis Stream)';
               return {
                 label: portName,
-                value: p.count,
+                value: numeric(p.count),
               };
             })}
             colorVariant="emerald"
@@ -153,8 +159,8 @@ export function NetworkPage() {
           </div>
           <BarList
             items={(data?.top_sources || []).map((s) => ({
-              label: s.src_ip || '127.0.0.1 (Local Client)',
-              value: s.count,
+              label: s.src_ip || 'Chưa ghi nhận IP nguồn',
+              value: numeric(s.count),
             }))}
             colorVariant="amber"
           />
@@ -168,8 +174,8 @@ export function NetworkPage() {
           </div>
           <BarList
             items={(data?.top_destinations || []).map((d) => ({
-              label: d.dst_ip || '172.20.0.x (Docker Bridge)',
-              value: d.count,
+              label: d.dst_ip || 'Chưa ghi nhận IP đích',
+              value: numeric(d.count),
             }))}
             colorVariant="cyan"
           />

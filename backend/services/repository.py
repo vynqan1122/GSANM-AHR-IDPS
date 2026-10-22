@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import text
@@ -10,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def _jsonable(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value) if value.is_finite() else None
     if isinstance(value, datetime):
         return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     if isinstance(value, dict):
@@ -494,10 +497,14 @@ async def network_summary(session: AsyncSession) -> dict[str, Any]:
             text(
                 """
                 SELECT
-                  count(*) FILTER (WHERE timestamp >= now() - interval '1 minute') / 60.0 AS flows_per_sec,
-                  coalesce(sum(coalesce((network->>'bytes')::bigint, 0)) FILTER (WHERE timestamp >= now() - interval '1 minute'), 0) / 60.0 AS bytes_per_sec,
+                  count(*) FILTER (WHERE event_type='flow' AND timestamp >= now() - interval '1 minute') / 60.0 AS flows_per_sec,
+                  coalesce(sum(
+                    (CASE WHEN jsonb_typeof(network->'bytes_to_server')='number' THEN (network->>'bytes_to_server')::bigint ELSE 0 END) +
+                    (CASE WHEN jsonb_typeof(network->'bytes_to_client')='number' THEN (network->>'bytes_to_client')::bigint ELSE 0 END)
+                  ) FILTER (WHERE event_type='flow' AND timestamp >= now() - interval '1 minute'), 0) / 60.0 AS bytes_per_sec,
                   count(*) FILTER (WHERE source = 'suricata' AND severity >= 5) AS suricata_alerts
                 FROM ahr.events
+                WHERE source='suricata'
                 """
             )
         )
@@ -507,6 +514,7 @@ async def network_summary(session: AsyncSession) -> dict[str, Any]:
             """
             SELECT coalesce(protocol, 'unknown') AS protocol, count(*) AS count
             FROM ahr.events
+            WHERE source='suricata'
             GROUP BY coalesce(protocol, 'unknown')
             ORDER BY count DESC
             LIMIT 10
@@ -519,6 +527,7 @@ async def network_summary(session: AsyncSession) -> dict[str, Any]:
             SELECT src_ip, count(*) AS count
             FROM ahr.events
             WHERE src_ip IS NOT NULL
+              AND source='suricata'
             GROUP BY src_ip
             ORDER BY count DESC
             LIMIT 10
@@ -531,6 +540,7 @@ async def network_summary(session: AsyncSession) -> dict[str, Any]:
             SELECT dst_ip, count(*) AS count
             FROM ahr.events
             WHERE dst_ip IS NOT NULL
+              AND source='suricata'
             GROUP BY dst_ip
             ORDER BY count DESC
             LIMIT 10
@@ -543,6 +553,7 @@ async def network_summary(session: AsyncSession) -> dict[str, Any]:
             SELECT dst_port, count(*) AS count
             FROM ahr.events
             WHERE dst_port IS NOT NULL
+              AND source='suricata'
             GROUP BY dst_port
             ORDER BY count DESC
             LIMIT 10

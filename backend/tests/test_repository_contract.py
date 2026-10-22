@@ -35,3 +35,11 @@ def test_activity_status_does_not_treat_old_data_as_current_health():
     assert activity_status(now-timedelta(minutes=10),now)=='stale'
     assert activity_status(now+timedelta(minutes=5),now)=='stale'
     assert activity_status(None,now)=='unknown'
+
+
+def test_numeric_database_metrics_serialize_as_numbers():
+    from decimal import Decimal
+    from backend.services.repository import _jsonable
+    data=_jsonable({'flows_per_sec':Decimal('3.400000'), 'bytes_per_sec':Decimal('0E-20')})
+    assert data=={'flows_per_sec':3.4,'bytes_per_sec':0.0}
+    assert isinstance(data['flows_per_sec'],float)
