@@ -1,5 +1,11 @@
 # Dataset va training cho DVWA
 
+Huong dan train dataset CSV/ZIP tu Kaggle, so sanh Logistic Regression,
+Random Forest, HistGradientBoosting va XGBoost nam tai
+[kaggle_dataset_and_training.md](kaggle_dataset_and_training.md). Script thuc
+thi la `scripts/train_kaggle_network.py`; model XGBoost chi duoc cai vao
+runtime khi chay voi `--install-xgboost`.
+
 ## Muc tieu dataset
 
 ![Dataset va luong AI](visuals/ahr-idps-ai-flow.png)

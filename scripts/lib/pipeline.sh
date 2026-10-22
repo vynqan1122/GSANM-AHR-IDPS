@@ -35,8 +35,14 @@ ahr_require_phase2_healthy() {
         id="$(ahr_pipeline_compose ps -q "$service")"
         [[ -n "$id" ]] || \
             ahr_die "Phase 2 service '$service' is not running; run scripts/start_sensors.sh first"
-        state="$(docker inspect --format '{{.State.Status}}' "$id")"
-        health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$id")"
+        for _ in $(seq 1 30); do
+            state="$(docker inspect --format '{{.State.Status}}' "$id")"
+            health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$id")"
+            if [[ "$state" == running && "$health" == healthy ]]; then
+                break
+            fi
+            sleep 1
+        done
         [[ "$state" == running && "$health" == healthy ]] || \
             ahr_die "Phase 2 service '$service' is $state/$health; repair Phase 2 before starting the pipeline"
     done

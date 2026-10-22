@@ -81,6 +81,7 @@ if [[ "$mode" == static ]]; then
 fi
 
 ahr_check_docker_engine
+ahr_require_phase3_healthy
 
 scenario_rows="$(ahr_ai_compose exec -T postgres sh -ec '
     PGPASSWORD="$AHR_DB_PASSWORD" exec psql --host=127.0.0.1 \

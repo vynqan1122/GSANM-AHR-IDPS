@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/lib/ai.sh"
 ahr_prepare_env
 ahr_require_phase3_healthy
 ahr_ai_compose config --quiet
+ahr_require_legacy_ai_mode
 "$SCRIPT_DIR/register_existing_models.sh"
 ahr_ai_compose up --detach --wait --wait-timeout 300 --no-build --no-deps \
   ai-network ai-log graph-builder fusion-engine incident-engine rule-generator response-engine

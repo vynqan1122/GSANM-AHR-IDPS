@@ -11,6 +11,11 @@ from backend.services import repository
 router = APIRouter()
 
 
+@router.get('/attack-graph')
+async def attack_graph(session: AsyncSession = Depends(session_dependency)) -> dict[str, object]:
+    return await repository.first_web_attacks(session)
+
+
 @router.get("/events")
 async def events(
     page: int = Query(1, ge=1),

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -48,6 +49,7 @@ async def train(output: Path) -> dict[str, object]:
         if y is None or len(set(y.tolist())) < 2:
             raise RuntimeError("network training requires both benign and attack labels")
         dtrain = xgb.DMatrix(x, label=y)
+        device = os.getenv("AHR_XGBOOST_DEVICE", "cpu")
         model = xgb.train(
             {
                 "objective": "binary:logistic",
@@ -57,6 +59,8 @@ async def train(output: Path) -> dict[str, object]:
                 "subsample": 0.9,
                 "colsample_bytree": 0.9,
                 "seed": 42,
+                "tree_method": "hist",
+                "device": device,
             },
             dtrain,
             num_boost_round=50,
@@ -73,6 +77,7 @@ async def train(output: Path) -> dict[str, object]:
             "feature_schema": schema(),
             "metrics": measured,
             "training_rows": len(rows),
+            "device": device,
         }
         metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
         await register_model(

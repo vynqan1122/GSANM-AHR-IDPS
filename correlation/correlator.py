@@ -81,6 +81,10 @@ async def service() -> None:
                         if event is None:
                             await redis_client.xack(settings.predictions_stream, group, stream_id)
                             continue
+                        from .rules import actionable_event
+                        if not actionable_event(event):
+                            await redis_client.xack(settings.predictions_stream, group, stream_id)
+                            continue
                         incident = await upsert_incident(connection, event)
                         await redis_client.xadd(
                             incident_stream,

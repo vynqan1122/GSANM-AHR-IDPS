@@ -60,7 +60,8 @@ async def export_dataset(connection: Any, output_root: Path) -> dict[str, str]:
         for row in await connection.fetch(
             """
             SELECT e.event_id, e.timestamp, e.source, e.event_type, e.category,
-                   e.src_ip, e.dst_ip, e.protocol, e.container, e.rule,
+                   e.src_ip, e.src_port, e.dst_ip, e.dst_port, e.protocol, e.http,
+                   e.network, e.process, e.file_details, e.user_details, e.container, e.rule,
                    e.severity, e.raw_event, e.metadata, l.scenario_id,
                    l.label, l.attack_type
             FROM ahr.events e

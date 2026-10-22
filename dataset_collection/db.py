@@ -84,8 +84,16 @@ async def label_scenario(connection: asyncpg.Connection, *, scenario_id: str) ->
         INSERT INTO ahr.event_labels(event_id, scenario_id, label, attack_type, match_reason)
         SELECT event_id, $1, $2, $3, 'scenario_id/time_window/target_marker'
         FROM ahr.events
-        WHERE timestamp BETWEEN $4::timestamptz AND ($5::timestamptz + interval '30 seconds')
-          AND raw_event::text LIKE '%' || $1 || '%'
+        WHERE timestamp BETWEEN ($4::timestamptz - interval '10 seconds') AND ($5::timestamptz + interval '30 seconds')
+          AND position($1 in raw_event::text) > 0
+          -- Login/setup/health/navigation are never attack-labelled by a test marker.
+          -- A malicious login still remains raw evidence for rule-based triage.
+          AND ($2 <> 'attack' OR NOT (
+            split_part(coalesce(http->>'uri', raw_event->>'request_uri',
+                                raw_event->'http'->>'url', ''), '?', 1)
+            = ANY(ARRAY['/','/index.php','/login.php','/logout.php','/setup.php',
+                        '/security.php','/healthz','/instructions.php','/about.php'])
+          ))
         ON CONFLICT (event_id, scenario_id) DO NOTHING
         """,
         marker,

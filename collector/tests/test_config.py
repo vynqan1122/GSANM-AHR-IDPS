@@ -19,8 +19,8 @@ def test_compose_environment_aliases() -> None:
     )
     assert config.redis_url == "redis://cache:6380/0"
     assert config.redis_password == "secret"
-    assert str(config.checkpoint_path) == "/state/checkpoints.sqlite3"
-    assert str(config.health_path) == "/health/collector.json"
+    assert config.checkpoint_path == Path('/state/checkpoints.sqlite3')
+    assert config.health_path == Path('/health/collector.json')
     assert next(source.path for source in config.file_sources if source.name == "nginx").as_posix() == (
         "/var/log/ahr-nginx/access.jsonl"
     )

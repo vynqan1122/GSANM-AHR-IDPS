@@ -162,7 +162,8 @@ async def get_incident(session: AsyncSession, incident_id: str) -> dict[str, Any
         text(
             """
             SELECT e.event_id, e.timestamp, e.source, e.event_type, e.src_ip,
-                   e.dst_ip, e.container, e.rule, e.severity, e.ai, ie.relationship,
+                   e.dst_ip, e.http, e.container, e.rule, e.severity, e.ai,
+                   e.raw_event, e.metadata, ie.relationship,
                    ie.confidence AS correlation_confidence
             FROM ahr.incident_events ie
             JOIN ahr.events e ON e.event_id = ie.event_id
@@ -173,6 +174,8 @@ async def get_incident(session: AsyncSession, incident_id: str) -> dict[str, Any
         {"incident_id": incident_id},
     )
     incident["events"] = [_row(item) for item in events]
+    from correlation.web_graph import build_web_graph
+    incident['attack_graph'] = build_web_graph(incident['events'])
     responses = await session.execute(
         text(
             """
@@ -187,6 +190,33 @@ async def get_incident(session: AsyncSession, incident_id: str) -> dict[str, Any
     )
     incident["responses"] = [_row(item) for item in responses]
     return incident
+
+
+async def first_web_attacks(session: AsyncSession) -> dict[str, Any]:
+    from correlation.web_graph import build_web_graph, detected_web_attack, request_identity
+    # Stream chronologically, stopping at twenty accepted records; do not load all historical logs.
+    result = await session.stream(text('''
+        SELECT event_id, timestamp, source, src_ip, dst_ip, http, container,
+               rule, ai, severity, raw_event, metadata
+        FROM ahr.events
+        WHERE (http->>'uri' IS NOT NULL OR http->>'url' IS NOT NULL)
+          AND (coalesce(nullif(rule->>'rule_id',''), rule->>'name', '') <> ''
+               OR CASE WHEN jsonb_typeof(ai->'fusion_score') = 'number'
+                       THEN (ai->>'fusion_score')::double precision >= 0.55 ELSE false END)
+        ORDER BY timestamp ASC, event_id ASC
+    ''').execution_options(yield_per=100))
+    rows, seen = [], set()
+    try:
+        async for item in result:
+            row = _row(item)
+            key = request_identity(row)
+            if detected_web_attack(row) and key not in seen:
+                rows.append(row); seen.add(key)
+                if len(rows) == 20:
+                    break
+    finally:
+        await result.close()
+    return build_web_graph(rows)
 
 
 async def list_responses(

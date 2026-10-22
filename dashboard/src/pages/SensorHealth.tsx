@@ -5,7 +5,7 @@ import type { Paged, SensorRow } from '../types/api';
 export function SensorHealth() {
   const [data, setData] = useState<Paged<SensorRow> | null>(null);
   useEffect(() => {
-    const load = () => getJson<Paged<SensorRow>>('/api/sensors').then(setData).catch(() => setData({ items: [], total: 0 }));
+    const load = () => getJson<Paged<SensorRow>>('/api/sensors').then(setData).catch(() => setData({ items: [], total: 0, page: 1, page_size: 50 }));
     load();
     const timer = window.setInterval(load, 5000);
     return () => window.clearInterval(timer);

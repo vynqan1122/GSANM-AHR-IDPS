@@ -1,9 +1,18 @@
 from __future__ import annotations
 
 from typing import Any
+from feature_engine.event_contract import routine_navigation
 
 
 VALID_STATUSES = {"open", "investigating", "contained", "resolved", "false_positive"}
+
+
+def actionable_event(event: dict[str, Any]) -> bool:
+    # Log all events, but normal navigation is not automatically an incident.
+    # Rule evidence or suspicious parameters still take the normal triage path.
+    if routine_navigation(event):
+        return False
+    return bool(event.get('rule')) or risk_score(event) >= 0.5
 
 
 def risk_score(event: dict[str, Any]) -> float:

@@ -88,8 +88,8 @@ def context_score(event: dict[str, Any], event_density: float = 0.0) -> float:
         clamp01(ai.get("log_score")) or 0.0,
         clamp01(ai.get("graph_score")) or 0.0,
     )
-    scenario_hint = 1.0 if labels.get("scenario_id") or labels.get("attack_type") else 0.0
-    return float(clamp01(0.45 * density_score + 0.35 * prior_ai + 0.20 * scenario_hint) or 0.0)
+    # Ground-truth/scenario metadata must never raise operational risk.
+    return float(clamp01(0.45 * density_score + 0.35 * prior_ai) or 0.0)
 
 
 def score_components(event: dict[str, Any], event_density: float = 0.0) -> dict[str, float | None]:

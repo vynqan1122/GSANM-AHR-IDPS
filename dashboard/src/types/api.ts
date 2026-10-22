@@ -138,3 +138,46 @@ export interface ExperimentRow {
   results_path?: string | null;
   metrics?: Record<string, number>;
 }
+
+export interface TimeseriesPoint {
+  bucket: string;
+  source: string;
+  count: number;
+}
+
+export interface OverviewData {
+  cards: {
+    total_events?: number;
+    events_per_min?: number;
+    active_alerts?: number;
+    critical_alerts?: number;
+    open_incidents?: number;
+    critical_incidents?: number;
+    overall_security_risk?: number;
+    active_rules?: number;
+    shadow_rules?: number;
+    [key: string]: number | undefined;
+  };
+  events_by_source: Array<{ source: string; count: number }>;
+  alerts_by_severity: Array<{ severity: number; count: number }>;
+  top_source_ips: Array<{ src_ip: string; count: number }>;
+  top_event_types: Array<{ event_type: string; count: number }>;
+}
+
+export interface NetworkSummaryData {
+  summary: {
+    flows_per_sec?: number;
+    bytes_per_sec?: number;
+    suricata_alerts?: number;
+  };
+  protocols: Array<{ protocol: string; count: number }>;
+  top_sources: Array<{ src_ip: string; count: number }>;
+  top_destinations: Array<{ dst_ip: string; count: number }>;
+  top_destination_ports: Array<{ dst_port: number; count: number }>;
+}
+
+export interface SystemHealthData {
+  overall: string;
+  status: string;
+  services: Record<string, string>;
+}

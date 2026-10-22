@@ -8,6 +8,7 @@ PHASE2_COMPOSE := docker compose --env-file .env \
 	-f sensors/wazuh/compose.fragment.yml
 
 .PHONY: help env install start stop restart status logs validate test \
+	start-all stop-all restart-all status-all health-all \
 	phase1-install phase1-start phase1-stop phase1-status phase1-logs \
 	phase1-validate phase1-test \
 	phase2-install phase2-start phase2-stop phase2-status phase2-logs \
@@ -17,6 +18,13 @@ PHASE2_COMPOSE := docker compose --env-file .env \
 
 help:
 	@printf '%s\n' \
+	  'AHR-IDPS Full Stack (Phase 1 -> 14) Unified Commands:' \
+	  '  make start-all        Start all 18 containers in proper dependency order' \
+	  '  make stop-all         Graceful shutdown of all 18 containers (preserves data)' \
+	  '  make restart-all      Restart entire system cleanly' \
+	  '  make status-all       Show status of all 18 containers and URLs' \
+	  '  make health-all       Comprehensive health check across DB, API, Sensors, AI' \
+	  '' \
 	  'AHR-IDPS Phase 1 + Phase 2 commands:' \
 	  '  make install          Generate private config and pull all images' \
 	  '  make start            Start/initialize Phase 1, then start sensors' \
@@ -47,6 +55,21 @@ env:
 install:
 	@bash ./scripts/start_lab.sh --install-only
 	@bash ./scripts/start_sensors.sh --install-only
+
+start-all:
+	@bash ./scripts/ahr_control.sh start
+
+stop-all:
+	@bash ./scripts/ahr_control.sh stop
+
+restart-all:
+	@bash ./scripts/ahr_control.sh restart
+
+status-all:
+	@bash ./scripts/ahr_control.sh status
+
+health-all:
+	@bash ./scripts/ahr_control.sh health
 
 start:
 	@bash ./scripts/start_lab.sh

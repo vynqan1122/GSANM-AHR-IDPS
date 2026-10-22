@@ -4,6 +4,7 @@ from typing import Any
 
 from .encoders import port_class, protocol_flags
 from .versioning import NETWORK_FEATURES, assert_no_feature_leakage
+from .event_contract import decode_event
 
 
 def _num(value: Any) -> float:
@@ -25,6 +26,7 @@ def _json_get(document: Any, *path: str) -> Any:
 
 
 def build_network_features(row: dict[str, Any]) -> list[float]:
+    row = decode_event(row)
     assert_no_feature_leakage()
     protocol_tcp, protocol_udp, protocol_http = protocol_flags(row.get("protocol"))
     http_status = _json_get(row.get("http"), "status") or _json_get(row.get("raw_event"), "http", "status")

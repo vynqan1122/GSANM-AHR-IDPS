@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Any
+from feature_engine.event_contract import decode_event
+from .web_graph import source_address
 
 
 def _node(nodes: dict[str, dict[str, Any]], node_id: str, label: str, kind: str) -> str:
@@ -25,9 +27,13 @@ def build_attack_chain(events: list[dict[str, Any]]) -> dict[str, Any]:
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
     for event in sorted(events, key=lambda item: str(item.get("timestamp") or "")):
+        event = decode_event(event)
         event_id = str(event["event_id"])
         timestamp = event.get("timestamp")
-        src = _node(nodes, f"ip:{event.get('src_ip') or 'unknown'}", str(event.get("src_ip") or "unknown"), "ip")
+        ip, origin = source_address(event)
+        src = _node(nodes, f"ip:{ip}" if ip else f"unattributed:{event_id}",
+                    ip or "Nguồn chưa ghi nhận IP", "ip" if ip else "unattributed")
+        nodes[src]['details'] = {'address_source': origin}
         request_label = str((event.get("http") or {}).get("uri") or (event.get("http") or {}).get("url") or event.get("event_type"))
         request = _node(nodes, f"request:{event_id}", request_label, "request")
         target_label = str((event.get("container") or {}).get("name") or event.get("dst_ip") or "target")

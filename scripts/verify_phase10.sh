@@ -86,8 +86,8 @@ incident_id="$(ahr_ai_compose ps -q incident-engine)"
 pass 'incident-engine realtime service is healthy and hardened'
 
 marker="ahr_p10_$(date +%s)_$$_${RANDOM:-0}"
-curl.exe --noproxy "*" -fsS -o /dev/null "http://127.0.0.1:${NGINX_PORT:-8080}/?ahr_phase10=$marker&step=1"
-curl.exe --noproxy "*" -fsS -o /dev/null "http://127.0.0.1:${NGINX_PORT:-8080}/?ahr_phase10=$marker&step=2"
+curl --noproxy '*' -fsS -o /dev/null "http://127.0.0.1:${NGINX_PORT:-8080}/?ahr_phase10=$marker&step=1"
+curl --noproxy '*' -fsS -o /dev/null "http://127.0.0.1:${NGINX_PORT:-8080}/?ahr_phase10=$marker&step=2"
 
 correlated_id=''
 for _ in $(seq 1 150); do
@@ -133,14 +133,15 @@ asyncio.run(main())
 PY
 pass 'Incident detail API renders summary, timeline, graph, event list, rule/AI summaries'
 
-stream_hit="$(ahr_ai_compose exec -T redis redis-cli -a "$REDIS_PASSWORD" XREVRANGE security.incidents + - COUNT 20 | tr -d '\r' | grep -F "$correlated_id" | head -n 1 || true)"
+redis_password="${REDIS_PASSWORD:-$(ahr_env_value REDIS_PASSWORD)}"
+stream_hit="$(ahr_ai_compose exec -T redis redis-cli -a "$redis_password" XREVRANGE security.incidents + - COUNT 500 | tr -d '\r' | grep -F "$correlated_id" | head -n 1 || true)"
 [[ -n "$stream_hit" ]] || fail 'security.incidents stream did not receive realtime incident update'
 pass 'Graph/timeline realtime updates are published on security.incidents'
 
-dashboard_html="$(curl.exe --noproxy "*" -fsS "http://127.0.0.1:${NGINX_PORT:-8080}/dashboard/")"
+dashboard_html="$(curl --noproxy '*' -fsS "http://127.0.0.1:${NGINX_PORT:-8080}/dashboard/")"
 dashboard_asset="$(sed -n 's/.*src="\([^"]*\.js\)".*/\1/p' <<<"$dashboard_html" | head -n 1)"
 [[ "$dashboard_asset" == /dashboard/assets/*.js ]] || fail 'Dashboard HTML does not reference a built JavaScript asset'
-dashboard_bundle="$(curl.exe --noproxy "*" -fsS "http://127.0.0.1:${NGINX_PORT:-8080}${dashboard_asset}")"
+dashboard_bundle="$(curl --noproxy '*' -fsS "http://127.0.0.1:${NGINX_PORT:-8080}${dashboard_asset}")"
 grep -Fq 'Incidents' <<<"$dashboard_bundle" || fail 'Dashboard bundle does not expose incident page'
 pass 'Dashboard incident page renders'
 

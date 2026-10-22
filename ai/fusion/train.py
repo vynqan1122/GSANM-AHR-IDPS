@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from pathlib import Path
 
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
@@ -45,6 +46,7 @@ async def train(output: Path) -> dict[str, object]:
         if len(set(y.tolist())) < 2:
             raise RuntimeError("fusion training requires benign and attack labels")
         dtrain = xgb.DMatrix(x, label=y, feature_names=list(FEATURE_NAMES))
+        device = os.getenv("AHR_XGBOOST_DEVICE", "cpu")
         model = xgb.train(
             {
                 "objective": "binary:logistic",
@@ -54,6 +56,8 @@ async def train(output: Path) -> dict[str, object]:
                 "subsample": 0.9,
                 "colsample_bytree": 0.9,
                 "seed": 42,
+                "tree_method": "hist",
+                "device": device,
             },
             dtrain,
             num_boost_round=40,
@@ -68,6 +72,7 @@ async def train(output: Path) -> dict[str, object]:
             "features": list(FEATURE_NAMES),
             "metrics": measured,
             "training_rows": len(events),
+            "device": device,
         }
         output.with_suffix(".metadata.json").write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
         await register_model(

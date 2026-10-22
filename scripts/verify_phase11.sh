@@ -134,10 +134,10 @@ asyncio.run(main())
 PY
 pass 'Generated-rule API exposes candidate content and metadata'
 
-dashboard_html="$(curl.exe --noproxy "*" -fsS "http://127.0.0.1:${NGINX_PORT:-8080}/dashboard/")"
+dashboard_html="$(curl --noproxy '*' -fsS "http://127.0.0.1:${NGINX_PORT:-8080}/dashboard/")"
 dashboard_asset="$(sed -n 's/.*src="\([^"]*\.js\)".*/\1/p' <<<"$dashboard_html" | head -n 1)"
 [[ "$dashboard_asset" == /dashboard/assets/*.js ]] || fail 'Dashboard HTML does not reference a built JavaScript asset'
-dashboard_bundle="$(curl.exe --noproxy "*" -fsS "http://127.0.0.1:${NGINX_PORT:-8080}${dashboard_asset}")"
+dashboard_bundle="$(curl --noproxy '*' -fsS "http://127.0.0.1:${NGINX_PORT:-8080}${dashboard_asset}")"
 grep -Fq 'Generated rules' <<<"$dashboard_bundle" || fail 'Dashboard bundle does not expose generated rules'
 pass 'Dashboard displays generated candidate rules'
 

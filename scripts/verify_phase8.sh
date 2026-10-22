@@ -104,7 +104,7 @@ graph_id="$(ahr_ai_compose ps -q graph-builder)"
 pass 'graph-builder realtime service is healthy and hardened'
 
 marker="ahr_p8_$(date +%s)_$$_${RANDOM:-0}"
-curl.exe --noproxy "*" -fsS -o /dev/null "http://127.0.0.1:${NGINX_PORT:-8080}/?ahr_phase8=$marker"
+curl --noproxy '*' -fsS -o /dev/null "http://127.0.0.1:${NGINX_PORT:-8080}/?ahr_phase8=$marker"
 
 event_id=''
 for _ in $(seq 1 120); do

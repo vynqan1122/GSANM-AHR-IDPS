@@ -83,6 +83,7 @@ ahr_ai_compose run --rm --no-deps ai-network python -m rule_engine.validator "$r
     --min-precision 0 --min-recall 0 --max-fpr 1 --min-positive-matches 0 >/tmp/ahr_phase12_validate.out
 
 validation_status="$(ahr_ai_compose exec -T postgres sh -ec '
+    rule_id="$1"
     PGPASSWORD="$AHR_DB_PASSWORD" exec psql --host=127.0.0.1 \
       --username="$AHR_DB_USER" --dbname="$POSTGRES_DB" \
       --tuples-only --no-align --set=ON_ERROR_STOP=1 \
@@ -95,10 +96,10 @@ validation_status="$(ahr_ai_compose exec -T postgres sh -ec '
                        r.promotion_requires_approval::text
                 FROM ahr.rules r
                 JOIN ahr.rule_validation_runs v ON v.rule_id = r.rule_id
-                WHERE r.rule_id = '\'''"$rule_id"'\''
+                WHERE r.rule_id = '\''$rule_id'\''
                 ORDER BY v.started_at DESC
                 LIMIT 1;"
-' | tr -d '\r')"
+' sh "$rule_id" | tr -d '\r')"
 IFS='|' read -r status precision recall fpr matches alerts_only approval_required <<<"$validation_status"
 [[ "$status" == "shadow" ]] || fail "Validated rule did not enter SHADOW (status=$status)"
 [[ -n "$precision" && -n "$recall" && -n "$fpr" && -n "$matches" ]] || fail 'Replay metrics were not calculated'
@@ -116,11 +117,12 @@ active_generated="$(ahr_ai_compose exec -T postgres sh -ec '
 pass 'Promotion requires approval; generated rules are not auto-active'
 
 version_count="$(ahr_ai_compose exec -T postgres sh -ec '
+    rule_id="$1"
     PGPASSWORD="$AHR_DB_PASSWORD" exec psql --host=127.0.0.1 \
       --username="$AHR_DB_USER" --dbname="$POSTGRES_DB" \
       --tuples-only --no-align --set=ON_ERROR_STOP=1 \
-      --command="SELECT count(*) FROM ahr.rule_versions WHERE rule_id='\'''"$rule_id"'\'';"
-' | tr -d '\r[:space:]')"
+      --command="SELECT count(*) FROM ahr.rule_versions WHERE rule_id = '\''$rule_id'\'';"
+' sh "$rule_id" | tr -d '\r[:space:]')"
 [[ "$version_count" -ge 1 ]] || fail 'Rule version history is missing'
 pass 'Rule version history exists'
 

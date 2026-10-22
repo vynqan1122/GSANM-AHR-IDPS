@@ -189,7 +189,19 @@ async def validate_rule(rule_id: str, thresholds: dict[str, float] | None = None
             "tp": 0, "fp": 0, "tn": 0, "fn": 0, "precision": 0.0, "recall": 0.0, "f1": 0.0, "fpr": 1.0,
             "support": 0, "match_count": 0, "processing_cost": 0.0,
         }
-        accepted = syntax.valid and passes(replay, thresholds)
+        from .genti import cove_verify
+
+        raw_pattern = rule.get("pattern") or {}
+        if isinstance(raw_pattern, str):
+            try:
+                pattern = json.loads(raw_pattern)
+            except Exception:
+                pattern = {}
+        else:
+            pattern = raw_pattern if isinstance(raw_pattern, dict) else {}
+
+        cove = cove_verify(engine, content, pattern, events, thresholds or DEFAULT_THRESHOLDS)
+        accepted = bool(cove["passed"] and passes(replay, thresholds))
         next_status = "shadow" if accepted else "rejected"
         await connection.execute(
             """
@@ -205,7 +217,11 @@ async def validate_rule(rule_id: str, thresholds: dict[str, float] | None = None
             "passed" if accepted else "failed",
             syntax.valid,
             json.dumps(replay),
-            json.dumps({"syntax_engine": syntax.engine_used, "shadow_alerts_only": accepted}),
+            json.dumps({
+                "syntax_engine": syntax.engine_used,
+                "shadow_alerts_only": accepted,
+                "genti_cove": cove,
+            }),
             syntax.error,
         )
         await connection.execute(
@@ -220,7 +236,14 @@ async def validate_rule(rule_id: str, thresholds: dict[str, float] | None = None
             next_status,
             json.dumps({"alerts_only": True, "replay_metrics": replay}),
         )
-        return {"rule_id": rule_id, "validation_id": validation_id, "status": next_status, "syntax": asdict(syntax), "metrics": replay}
+        return {
+            "rule_id": rule_id,
+            "validation_id": validation_id,
+            "status": next_status,
+            "syntax": asdict(syntax),
+            "metrics": replay,
+            "genti_cove": cove,
+        }
     finally:
         await connection.close()
 

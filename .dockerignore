@@ -1,4 +1,9 @@
 .git
+artifacts/
+dist/
+output/
+tmp/
+.venv-http/
 .env
 .env.*
 !.env.example
@@ -15,6 +20,12 @@ datasets/labels/
 datasets/graphs/
 datasets/metadata/
 experiments/results/
+experiments/bundles/
+secrets/
+dashboard/node_modules/
 evidence/
 sensors/wazuh/secrets/
 *.log
+
+llm-system/
+restore-backups/

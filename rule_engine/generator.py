@@ -18,12 +18,13 @@ from ai.network.db import connect
 from .abstraction import contains_sample_specific_artifact
 from .engine_selector import select_engine
 from .explainer import explain
+from .genti import GENTI_VERSION, build_context
 from .pattern_miner import mine_patterns
 from .templates import falco, suricata, wazuh
 
 
 GENERATOR = "ahr-rulegen-v1"
-MODEL_VERSIONS = {"fusion": "fusion-v1", "graph": "graphsage-v1", "rule_generator": GENERATOR}
+MODEL_VERSIONS = {"fusion": "fusion-v1", "graph": "graphsage-v1", "rule_generator": GENERATOR, "genti": GENTI_VERSION}
 
 
 def sid_for(pattern: dict[str, Any]) -> int:
@@ -60,6 +61,7 @@ async def store_candidate(connection: Any, pattern: dict[str, Any], content: str
     rule_id = "gen-" + hashlib.sha256((engine + digest).encode("utf-8")).hexdigest()[:24]
     metadata = {
         "pattern": pattern,
+        "genti_context": build_context(pattern),
         "support": pattern["support"],
         "confidence": pattern["confidence"],
         "model_versions": MODEL_VERSIONS,

@@ -1,5 +1,12 @@
 # AHR-IDPS
 
+Đã train Colab và có `dist/ahr-models-v2.zip`: xem
+[cài bundle v2, chạy AI local và graph 20 request](docs/USE_COLAB_MODEL_BUNDLE.md).
+
+Notebook Colab L4 cho hệ thống AI legacy: [hướng dẫn](docs/COLAB_AI_GUIDE.md),
+[notebook](notebooks/AHR_IDPS_L4_Training.ipynb). Colab v2 dùng bộ scorer và bridge
+có version riêng; không ghi đè mù các artifact cũ. Bản LLM vẫn riêng ở llm-system/.
+
 **Adaptive Hybrid Rule-AI Intrusion Detection and Prevention System**
 
 > Runbook hiện hành bằng tiếng Việt: [kiểm thử, giám sát và pentest có kiểm
@@ -11,6 +18,10 @@ Giải thích node, giao diện quản trị và quy trình giám sát: [docs/ah
 Workflow script ổn định cho lab nhỏ: [SCRIPTS_README_V2.md](SCRIPTS_README_V2.md).
 
 Dataset và quy trình train cho DVWA: [docs/dataset_training_guide.md](docs/dataset_training_guide.md).
+
+Phân tích GenTI và phần tích hợp CoVe/CTI vào Rule Engine: [docs/paper_genti_analysis.md](docs/paper_genti_analysis.md). Sơ đồ vòng đời rule theo GenTI-lite: [docs/visuals/genti-ahr-idps.workflow.html](docs/visuals/genti-ahr-idps.workflow.html).
+
+Train và so sánh Network AI từ CSV/ZIP Kaggle: [docs/kaggle_dataset_and_training.md](docs/kaggle_dataset_and_training.md).
 
 Wazuh manager API tùy chọn được mở loopback bằng `bash ./scripts/start_wazuh_api.sh`;
 dashboard quản trị dùng mục **Wazuh Manager** và địa chỉ `https://127.0.0.1:55000`.

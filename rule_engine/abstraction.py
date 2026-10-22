@@ -36,6 +36,7 @@ def abstract_pattern(events: list[dict[str, Any]]) -> dict[str, Any]:
         "type": pattern_type,
         "source": first.get("source"),
         "event_type": first.get("event_type"),
+        "attack_type": first.get("attack_type") or (first.get("labels") or {}).get("attack_type"),
         "http_method": http_method(events),
         "uri_pattern": uri_pattern,
         "protocol": first.get("protocol"),

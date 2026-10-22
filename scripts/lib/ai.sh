@@ -5,6 +5,24 @@ source "$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/app.sh"
 
 AHR_AI_FRAGMENT="$AHR_PROJECT_ROOT/ai/compose.fragment.yml"
 
+ahr_require_legacy_ai_mode() {
+    local project service
+    project="$(ahr_ai_compose config --format json | python3 -c 'import json,sys;print(json.load(sys.stdin)["name"])')"
+    for service in ai-bundle colab-bridge; do
+        [[ -z "$(docker ps -q --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=$service")" ]] || \
+            ahr_die "Stop $service before starting legacy AI to avoid overlapping scorers."
+    done
+}
+
+ahr_stop_alternative_ai() {
+    local project service id
+    project="$(ahr_ai_compose config --format json | python3 -c 'import json,sys;print(json.load(sys.stdin)["name"])')"
+    for service in ai-bundle colab-bridge; do
+        id="$(docker ps -q --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=$service")"
+        [[ -z "$id" ]] || docker stop --time 20 "$id"
+    done
+}
+
 ahr_require_ai_files() {
     ahr_require_app_files
     [[ -f "$AHR_AI_FRAGMENT" ]] || \

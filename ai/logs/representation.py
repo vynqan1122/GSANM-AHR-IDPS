@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .sanitizer import sanitize_text
+from feature_engine.event_contract import learning_event
 
 
 def _get(document: dict[str, Any], *path: str) -> Any:
@@ -15,6 +16,7 @@ def _get(document: dict[str, Any], *path: str) -> Any:
 
 
 def normalized_log_text(event: dict[str, Any]) -> str:
+    event = learning_event(event)
     source = str(event.get("source") or "")
     rule = event.get("rule") if isinstance(event.get("rule"), dict) else {}
     process = event.get("process") if isinstance(event.get("process"), dict) else {}

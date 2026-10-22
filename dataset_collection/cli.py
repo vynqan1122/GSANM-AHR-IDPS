@@ -36,11 +36,15 @@ async def run_benign(args: argparse.Namespace) -> None:
         )
         count = await run_specs(target, BENIGN_FLOW, scenario_id=scenario_id, repeat=args.repeat, fast=args.fast)
         linked = await finish_scenario(connection, scenario_id=scenario_id, request_count=count)
-        for _ in range(args.label_wait_seconds):
+        deadline_ticks = args.label_wait_seconds
+        while deadline_ticks > 0:
             if linked > 0:
+                await asyncio.sleep(2)
+                linked += await label_scenario(connection, scenario_id=scenario_id)
                 break
             await asyncio.sleep(1)
-            linked = await label_scenario(connection, scenario_id=scenario_id)
+            deadline_ticks -= 1
+            linked += await label_scenario(connection, scenario_id=scenario_id)
     finally:
         await connection.close()
     print(json.dumps({"scenario_id": scenario_id, "requests": count, "linked_events": linked}, sort_keys=True))
@@ -65,11 +69,15 @@ async def run_controlled(args: argparse.Namespace) -> None:
         )
         count = await run_specs(target, specs, scenario_id=scenario_id, repeat=args.repeat, fast=args.fast)
         linked = await finish_scenario(connection, scenario_id=scenario_id, request_count=count)
-        for _ in range(args.label_wait_seconds):
+        deadline_ticks = args.label_wait_seconds
+        while deadline_ticks > 0:
             if linked > 0:
+                await asyncio.sleep(2)
+                linked += await label_scenario(connection, scenario_id=scenario_id)
                 break
             await asyncio.sleep(1)
-            linked = await label_scenario(connection, scenario_id=scenario_id)
+            deadline_ticks -= 1
+            linked += await label_scenario(connection, scenario_id=scenario_id)
     finally:
         await connection.close()
     print(json.dumps({"scenario_id": scenario_id, "requests": count, "linked_events": linked}, sort_keys=True))

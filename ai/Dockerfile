@@ -20,3 +20,4 @@ COPY correlation ./correlation
 COPY feature_engine ./feature_engine
 COPY rule_engine ./rule_engine
 COPY response ./response
+COPY scripts/train_kaggle_network.py ./scripts/train_kaggle_network.py

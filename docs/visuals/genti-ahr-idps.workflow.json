@@ -1,0 +1,50 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "GenTI inspired AHR IDPS rule lifecycle",
+    "quality_profile": "showcase",
+    "output": "docs/visuals/genti-ahr-idps.workflow.html",
+    "viewBox": [1180, 1050]
+  },
+  "lanes": [
+    {"id": "analyst", "label": "Analyst and telemetry"},
+    {"id": "rule_ai", "label": "Rule intelligence"},
+    {"id": "safety", "label": "Validation and deployment", "variant": "exception"}
+  ],
+  "phases": [
+    {"id": "p1", "label": "Build context", "fromCol": 0, "toCol": 1, "variant": "emphasis"},
+    {"id": "p2", "label": "Refine candidate", "fromCol": 2, "toCol": 3, "variant": "security"},
+    {"id": "p3", "label": "Verify and observe", "fromCol": 4, "toCol": 5, "variant": "emphasis"}
+  ],
+  "mainPath": ["payload", "context", "candidate", "cove", "shadow", "approved"],
+  "semanticChecks": {
+    "allowedRoots": ["payload"],
+    "allowedTerminals": ["rejected", "approved"],
+    "requiredEdges": [
+      {"from": "payload", "to": "context"},
+      {"from": "context", "to": "candidate"},
+      {"from": "candidate", "to": "cove"},
+      {"from": "cove", "to": "shadow"},
+      {"from": "shadow", "to": "approved"}
+    ]
+  },
+  "nodes": [
+    {"id": "payload", "lane": "analyst", "col": 0, "width": 180, "type": "external", "label": "DVWA event and payload", "sublabel": "Sensors and logs"},
+    {"id": "context", "lane": "rule_ai", "col": 1, "width": 180, "type": "backend", "label": "Context and CTI map", "sublabel": "CWE ATT&CK provenance"},
+    {"id": "candidate", "lane": "rule_ai", "col": 2, "width": 180, "type": "security", "label": "Candidate rule", "sublabel": "Suricata Falco or Wazuh"},
+    {"id": "cove", "lane": "safety", "col": 3, "width": 180, "type": "security", "label": "CoVe gate", "sublabel": "Syntax logic false positive"},
+    {"id": "shadow", "lane": "safety", "col": 4, "width": 180, "type": "backend", "label": "Shadow alerts only", "sublabel": "No blocking"},
+    {"id": "approved", "lane": "safety", "col": 5, "width": 180, "type": "security", "label": "Manual approval", "sublabel": "Active only after review"},
+    {"id": "rejected", "lane": "safety", "col": 4, "yOffset": 94, "width": 180, "type": "external", "label": "Reject and feedback", "sublabel": "Refine or discard"}
+  ],
+  "edges": [
+    {"id": "e1", "from": "payload", "to": "context", "label": "normalize"},
+    {"id": "e2", "from": "context", "to": "candidate", "label": "generate"},
+    {"id": "e3", "from": "candidate", "to": "cove", "label": "evaluate"},
+    {"id": "e4", "from": "cove", "to": "shadow", "label": "pass"},
+    {"id": "e5", "from": "shadow", "to": "approved", "label": "approve", "variant": "security"},
+    {"id": "e6", "from": "cove", "to": "rejected", "label": "fail", "role": "error"},
+    {"id": "e7", "from": "rejected", "to": "context", "label": "feedback", "role": "return"}
+  ]
+}

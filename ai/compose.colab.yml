@@ -1,0 +1,23 @@
+services:
+  colab-bridge:
+    extends:
+      file: ai/compose.fragment.yml
+      service: ai-network
+    profiles: [colab]
+    build:
+      context: .
+      dockerfile: ai/Dockerfile
+    command: [python, -m, ai.colab.bridge]
+    environment:
+      COLAB_ENDPOINT: ${COLAB_ENDPOINT:?Set current HTTPS Colab tunnel origin}
+    networks: [data, colab_outbound]
+    # No local model/data mount is required by the remote scorer bridge.
+    volumes: !override
+      - ${COLAB_TOKEN_FILE:?Set path to private colab_token file}:/run/secrets/colab_token:ro
+    healthcheck:
+      test: [CMD-SHELL, "python -c \"import json,datetime;d=json.load(open('/tmp/colab-bridge.json'));t=datetime.datetime.fromisoformat(d['updated']);assert d['status'] in ('running','idle') and (datetime.datetime.now(datetime.timezone.utc)-t).total_seconds()<90\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+networks:
+  colab_outbound: {driver: bridge}

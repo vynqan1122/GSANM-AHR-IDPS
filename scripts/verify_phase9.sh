@@ -120,7 +120,7 @@ fusion_id="$(ahr_ai_compose ps -q fusion-engine)"
 pass 'fusion-engine realtime service is healthy and hardened'
 
 marker="ahr_p9_$(date +%s)_$$_${RANDOM:-0}"
-curl.exe --noproxy "*" -fsS -o /dev/null "http://127.0.0.1:${NGINX_PORT:-8080}/?ahr_phase9=$marker"
+curl --noproxy '*' -fsS -o /dev/null "http://127.0.0.1:${NGINX_PORT:-8080}/?ahr_phase9=$marker"
 
 event_id=''
 for _ in $(seq 1 150); do
@@ -183,10 +183,10 @@ asyncio.run(main())
 PY
 pass 'Dashboard API exposes rule/network/log/graph/context/fusion score breakdown'
 
-dashboard_html="$(curl.exe --noproxy "*" -fsS "http://127.0.0.1:${NGINX_PORT:-8080}/dashboard/")"
+dashboard_html="$(curl --noproxy '*' -fsS "http://127.0.0.1:${NGINX_PORT:-8080}/dashboard/")"
 dashboard_asset="$(sed -n 's/.*src="\([^"]*\.js\)".*/\1/p' <<<"$dashboard_html" | head -n 1)"
 [[ "$dashboard_asset" == /dashboard/assets/*.js ]] || fail 'Dashboard HTML does not reference a built JavaScript asset'
-dashboard_bundle="$(curl.exe --noproxy "*" -fsS "http://127.0.0.1:${NGINX_PORT:-8080}${dashboard_asset}")"
+dashboard_bundle="$(curl --noproxy '*' -fsS "http://127.0.0.1:${NGINX_PORT:-8080}${dashboard_asset}")"
 grep -Fq 'Fusion score' <<<"$dashboard_bundle" || fail 'Dashboard bundle does not render fusion score'
 pass 'Dashboard displays the Phase 9 fusion score breakdown'
 

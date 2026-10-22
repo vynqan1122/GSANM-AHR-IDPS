@@ -9,7 +9,7 @@ from typing import Any
 import redis.asyncio as redis
 import xgboost as xgb
 
-from feature_engine.network_features import build_network_features
+from feature_engine.network_features import build_network_features, feature_names
 from feature_engine.versioning import FEATURES_VERSION
 
 from .config import Settings
@@ -82,7 +82,7 @@ async def run_once(settings: Settings) -> int:
         for row in rows:
             event = dict(row)
             started = time.perf_counter()
-            score = float(model.predict(xgb.DMatrix([build_network_features(event)]))[0])
+            score = float(model.predict(xgb.DMatrix([build_network_features(event)], feature_names=feature_names() if model.feature_names else None))[0])
             await persist_prediction(connection, event, score, (time.perf_counter() - started) * 1000)
             count += 1
         return count
@@ -126,7 +126,7 @@ async def service() -> None:
                 for stream_id, fields in messages:
                     event = _payload(fields)
                     started = time.perf_counter()
-                    score = float(model.predict(xgb.DMatrix([build_network_features(event)]))[0])
+                    score = float(model.predict(xgb.DMatrix([build_network_features(event)], feature_names=feature_names() if model.feature_names else None))[0])
                     latency_ms = (time.perf_counter() - started) * 1000
                     await persist_prediction(connection, event, score, latency_ms)
                     await redis_client.xadd(

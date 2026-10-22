@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getJson, postJson } from '../api/client';
 import type { AlertRow, ContainerRow, EventRow, ExperimentRow, ModelRow, Paged, SensorRow } from '../types/api';
+import { AttackGraph, type GraphData } from '../components/AttackGraph';
 
 const val = (x: unknown) => x === undefined || x === null ? '' : String(x);
 const pct = (x: unknown) => typeof x === 'number' ? x.toFixed(3) : '';
@@ -12,11 +13,22 @@ export function AlertsPage() {
 }
 
 export function AttackGraphPage() {
-  const [data, setData] = useState<any>(null);
-  useEffect(() => { getJson<Paged<any>>('/api/incidents?page_size=1').then(async (d) => d.items[0] && setData(await getJson(`/api/incidents/${d.items[0].incident_id}`))).catch(() => setData(null)); }, []);
-  const nodes = data?.attack_graph?.nodes ?? [];
-  const edges = data?.attack_graph?.edges ?? [];
-  return <section className="table-shell"><h2>Attack Graph</h2><p>Filters: time · node type · risk · incident</p><p>Nodes: {nodes.length} · Edges: {edges.length}</p><pre>{JSON.stringify({ nodes: nodes.slice(0, 8), edges: edges.slice(0, 8) }, null, 2)}</pre></section>;
+  const [data, setData] = useState<GraphData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const load = async () => {
+    setLoading(true); setError('');
+    try { setData(await getJson<GraphData>('/api/attack-graph')); }
+    catch { setError('Không tải được graph. Kiểm tra API/backend rồi bấm Tải lại.'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void load(); }, []);
+  return <section className="table-shell web-attack-page">
+    <h2>20 request tấn công đầu tiên</h2>
+    <p>Toàn bộ lịch sử web đã thu thập, từ cũ đến mới. Chỉ thể hiện request HTTP có bằng chứng rule hoặc điểm Fusion đạt ngưỡng.</p>
+    <button type="button" disabled={loading} onClick={load}>{loading ? 'Đang tải…' : 'Tải lại graph'}</button>
+    {error ? <p role="alert">{error}</p> : !loading || data ? <AttackGraph graph={data} /> : <p role="status">Đang đọc sự kiện…</p>}
+  </section>;
 }
 
 export function NetworkPage() {
