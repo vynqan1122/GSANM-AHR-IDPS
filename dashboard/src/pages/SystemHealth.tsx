@@ -31,9 +31,9 @@ const SERVICE_LABELS: Record<string, { label: string; group: string; icon: any }
   collector: { label: 'Event Collector', group: 'Cảm biến an ninh (Sensors)', icon: Layers },
   normalizer: { label: 'Event Normalizer', group: 'Cảm biến an ninh (Sensors)', icon: Layers },
 
-  network_ai: { label: 'Network Flow AI (Autoencoder)', group: 'Mô hình AI & Phân tích', icon: Cpu },
-  log_ai: { label: 'Log Semantic NLP AI', group: 'Mô hình AI & Phân tích', icon: Cpu },
-  graph_ai: { label: 'Graph Correlation GNN', group: 'Mô hình AI & Phân tích', icon: Cpu },
+  network_ai: { label: 'Network AI · XGBoost', group: 'Mô hình AI & Phân tích', icon: Cpu },
+  log_ai: { label: 'Log AI · MLP / Isolation Forest', group: 'Mô hình AI & Phân tích', icon: Cpu },
+  graph_ai: { label: 'Graph aggregation + MLP', group: 'Mô hình AI & Phân tích', icon: Cpu },
   fusion: { label: 'Hybrid Risk Fusion Engine', group: 'Mô hình AI & Phân tích', icon: Cpu },
   correlation: { label: 'Incident Correlation Engine', group: 'Mô hình AI & Phân tích', icon: Cpu },
   rule_engine: { label: 'Rule Lifecycle Engine', group: 'Mô hình AI & Phân tích', icon: Cpu },
@@ -100,11 +100,11 @@ export function SystemHealth() {
           <div>
             <h2 className="banner-title">
               {isOverallHealthy
-                ? 'TOÀN BỘ CÁC MICROSERVICES ĐANG HOẠT ĐỘNG ỔN ĐỊNH'
+                ? 'API VÀ KẾT NỐI DỮ LIỆU SẴN SÀNG'
                 : 'CẢNH BÁO: MỘT SỐ DỊCH VỤ HOẠT ĐỘNG CHƯA ĐỒNG BỘ'}
             </h2>
             <p className="banner-desc">
-              Kiểm tra nhịp tim (Heartbeat) và độ trễ của 19 microservices & cảm biến thu thập sự kiện.
+              Reporting: có dữ liệu trong 120 giây gần nhất. Stale: chưa có dữ liệu mới, không đồng nghĩa container dừng. Kiểm tra trạng thái tiến trình bằng Docker healthcheck.
             </p>
           </div>
         </div>
@@ -138,7 +138,7 @@ export function SystemHealth() {
                   icon: Server,
                 };
                 const Icon = meta.icon;
-                const isUp = status.toLowerCase() === 'up';
+                const isUp = ['up','healthy','reporting','running','idle'].includes(status.toLowerCase());
 
                 return (
                   <div
@@ -149,7 +149,7 @@ export function SystemHealth() {
                       <div className="service-icon-box">
                         <Icon size={16} />
                       </div>
-                      <Badge variant={isUp ? 'success' : 'critical'} size="sm" dot>
+                      <Badge variant={isUp ? 'success' : status === 'stale' || status === 'unknown' ? 'warning' : 'critical'} size="sm" dot>
                         {status.toUpperCase()}
                       </Badge>
                     </div>
@@ -200,14 +200,14 @@ export function SystemHealth() {
                       {s.last_event_at ? s.last_event_at.replace('T', ' ').slice(0, 19) : '—'}
                     </td>
                     <td className="font-mono text-xs text-slate-400">
-                      {s.last_event_at ? 'Real-time (<1s)' : '—'}
+                      {s.last_ingestion_at ? s.last_ingestion_at.replace('T', ' ').slice(0,19) : 'Chưa có timestamp'}
                     </td>
                     <td className="font-mono text-xs">
                       <span className={s.error_count > 0 ? 'text-amber-400 font-bold' : 'text-slate-400'}>
                         {s.error_count} lỗi
                       </span>
                     </td>
-                    <td className="text-xs text-slate-400">Vừa xong</td>
+                    <td className="text-xs text-slate-400">{s.updated_at ? s.updated_at.replace('T',' ').slice(0,19) : '—'}</td>
                   </tr>
                 ))
               ) : (

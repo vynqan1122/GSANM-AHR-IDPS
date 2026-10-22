@@ -39,10 +39,28 @@ powershell -ExecutionPolicy Bypass -File scripts/start_bundle_ai.ps1
 
 Script build trước khi dừng scorer cũ, sau đó dừng ai-network/ai-log/
 graph-builder/fusion-engine và Colab bridge đang chạy của cùng Compose project.
-Nó bật `ai-bundle` và `incident-engine`. Không cần Colab/ngrok online sau khi
+Nó bật `ai-bundle`, `incident-engine`, `rule-generator` và `response-engine`. Không cần Colab/ngrok online sau khi
 tải model. Network/Fusion/Log/Graph đều inference CPU local; file được train GPU
 vẫn dùng CPU để inference được. Các service rule/response hiện có không bị đổi
 policy, active response vẫn alert_only nếu cấu hình lab giữ mặc định.
+
+Khi cần API Wazuh Manager, chạy trong Git Bash:
+
+```bash
+bash scripts/start_wazuh_api.sh
+```
+
+API mở tại `https://127.0.0.1:55000`, yêu cầu xác thực; HTTP 401 khi chưa đăng
+nhập là phản hồi đúng. Đây là API Manager, không phải một Wazuh Dashboard riêng.
+Stack bundle đầy đủ có 15 container: 5 core, 3 sensor, collector/normalizer,
+backend và 4 node ai-bundle/incident-engine/rule-generator/response-engine.
+Network/Log/Graph/Fusion đều được chấm trong ai-bundle; không bật bốn scorer
+legacy đồng thời. Colab bridge chỉ dùng thay thế khi chủ động chạy AI remote.
+
+Trang Sức khỏe hiển thị collector/normalizer qua ingestion gần nhất: `reporting`
+khi dữ liệu mới trong 120 giây, `stale` khi không có sự kiện mới. Đây là bằng
+chứng luồng dữ liệu, không thay Docker healthcheck của tiến trình. Thời gian
+ingestion hiện timestamp thật; không tự ghi độ trễ `<1s` khi chưa đo.
 
 Xem log:
 

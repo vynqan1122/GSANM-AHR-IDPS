@@ -18,6 +18,6 @@ $project=(docker compose @ca config --format json | ConvertFrom-Json).name
 if($LASTEXITCODE -ne 0 -or -not $project){throw 'Cannot resolve Compose project'}
 $bridge=docker ps -q --filter 'label=com.docker.compose.service=colab-bridge' --filter "label=com.docker.compose.project=$project"
 if($bridge){docker stop $bridge; if($LASTEXITCODE -ne 0){throw 'Could not stop overlapping Colab bridge'}}
-docker compose @ca up -d --no-build --no-deps --wait --wait-timeout 180 ai-bundle incident-engine
+docker compose @ca up -d --no-build --no-deps --wait --wait-timeout 180 ai-bundle incident-engine rule-generator response-engine
 if($LASTEXITCODE -ne 0){throw 'Bundle AI unhealthy; inspect logs. Pending events are preserved.'}
-docker compose @ca ps ai-bundle incident-engine
+docker compose @ca ps ai-bundle incident-engine rule-generator response-engine

@@ -31,6 +31,8 @@ export interface SensorRow {
   sensor: string;
   status: string;
   last_event_at?: string | null;
+  last_ingestion_at?: string | null;
+  updated_at?: string | null;
   error_count: number;
 }
 

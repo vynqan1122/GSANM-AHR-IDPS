@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.session import session_dependency
 from backend.main_state import get_state
+from backend.services.activity import activity_status
 
 router = APIRouter()
 
@@ -31,10 +32,14 @@ async def system_health(
 
     rows = (
         await session.execute(
-            text("SELECT sensor, status FROM ahr.sensor_health ORDER BY sensor")
+            text("SELECT sensor, status, last_ingestion_at FROM ahr.sensor_health ORDER BY sensor")
         )
     ).all()
-    sensor_map = {row.sensor: ("up" if str(row.status).lower() in {"healthy", "running", "up"} else str(row.status)) for row in rows}
+    sensor_map = {row.sensor: (activity_status(row.last_ingestion_at)
+                             if str(row.status).lower() in {'healthy','running','up','reporting'}
+                             else str(row.status)) for row in rows}
+    latest_ingestion = await session.scalar(text('SELECT max(ingestion_timestamp) FROM ahr.events'))
+    pipeline_activity = activity_status(latest_ingestion)
     services.update(
         {
             "dvwa": "up",
@@ -43,8 +48,8 @@ async def system_health(
             "suricata": sensor_map.get("suricata", "unknown"),
             "falco": sensor_map.get("falco", "unknown"),
             "wazuh": sensor_map.get("wazuh", "unknown"),
-            "collector": sensor_map.get("collector", "unknown"),
-            "normalizer": sensor_map.get("normalizer", "unknown"),
+            "collector": pipeline_activity,
+            "normalizer": pipeline_activity,
             "network_ai": "up" if await session.scalar(text("SELECT EXISTS (SELECT 1 FROM ahr.ai_predictions WHERE task = 'network_detection')")) else "unknown",
             "log_ai": "up" if await session.scalar(text("SELECT EXISTS (SELECT 1 FROM ahr.ai_predictions WHERE task LIKE 'log%')")) else "unknown",
             "graph_ai": "up" if await session.scalar(text("SELECT EXISTS (SELECT 1 FROM ahr.graph_windows)")) else "unknown",
@@ -55,4 +60,6 @@ async def system_health(
         }
     )
     overall = "healthy" if services.get("postgres") == "up" and services.get("redis") == "up" and services.get("backend") == "up" else "degraded"
-    return {"overall": overall, "status": overall, "services": services}
+    return {"overall": overall, "status": overall, "services": services,
+            "pipeline_activity_evidence": {'last_ingestion_at': latest_ingestion,
+                'note': 'Recent ingestion proves the pipeline delivered data; Docker healthchecks confirm process health separately.'}}

@@ -25,3 +25,13 @@ def test_event_filters_include_required_fields() -> None:
     assert "src_ip = :src_ip" in joined
     assert "container ->> 'name' ILIKE :container" in joined
     assert params["container"] == "%dvwa%"
+
+
+def test_activity_status_does_not_treat_old_data_as_current_health():
+    from datetime import datetime, timedelta, timezone
+    from backend.services.activity import activity_status
+    now=datetime(2026,10,22,tzinfo=timezone.utc)
+    assert activity_status(now-timedelta(seconds=20),now)=='reporting'
+    assert activity_status(now-timedelta(minutes=10),now)=='stale'
+    assert activity_status(now+timedelta(minutes=5),now)=='stale'
+    assert activity_status(None,now)=='unknown'

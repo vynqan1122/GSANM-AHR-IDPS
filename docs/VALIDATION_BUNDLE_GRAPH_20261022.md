@@ -46,6 +46,20 @@ Screenshot/QA script lưu ngoài repository, không publish log hoặc ảnh req
 - Mẫu cấu hình .env.example dùng CHANGE_ME để tạo secret riêng cho cài mới.
   .env hiện có không bị thay mật khẩu hoặc reset volume.
 
+Đã bật bổ sung rule-generator/response-engine và Wazuh Manager API trên loopback
+55000. Kiểm tra lần khởi động đầy đủ: **15/15 container healthy**, DVWA/dashboard/
+health/attack-graph/models/rules/responses trả HTTP 200; Manager API trả HTTP 401
+đúng khi chưa xác thực. Các daemon Wazuh phân tích/logcollector/remoted/DB/API
+đang chạy. Không bật mail/cluster/agentless vì không được cấu hình trong lab.
+
+Đã sửa phân biệt trạng thái tiến trình và hoạt động ingestion: collector/
+normalizer không còn báo unknown do thiếu row sensor_health, hoặc luôn healthy
+chỉ vì query trả dữ liệu lịch sử. Mốc 120 giây và trạng thái stale/unknown có
+test. Dashboard bỏ latency giả `<1s`, dùng timestamp ingestion thật và tên
+thuật toán đang triển khai. Kiểm thử sau thay đổi: **99 tests đạt**, TypeScript/
+Vite build đạt, System Health tải lại được trên Chromium desktop/mobile, không
+JavaScript error. Xác nhận thêm request login hợp lệ vẫn được bundle chấm local.
+
 ## Giới hạn và phần chưa xác minh
 
 Dataset 340 sự kiện còn nhỏ; không suy ra chất lượng phát hiện đầy đủ DVWA từ
