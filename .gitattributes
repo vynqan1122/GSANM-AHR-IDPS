@@ -9,3 +9,4 @@
 *.ts text eol=lf
 *.tsx text eol=lf
 Makefile text eol=lf
+*.cmd text eol=crlf

@@ -5,9 +5,15 @@ source "$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/app.sh"
 
 AHR_AI_FRAGMENT="$AHR_PROJECT_ROOT/ai/compose.fragment.yml"
 
+# Same precedence as Compose: shell COMPOSE_PROJECT_NAME, then the env file.
+# Avoids python3, which is only a Microsoft Store stub under Git Bash.
+ahr_compose_project_name() {
+    printf '%s\n' "${COMPOSE_PROJECT_NAME:-$(ahr_env_value COMPOSE_PROJECT_NAME)}"
+}
+
 ahr_require_legacy_ai_mode() {
     local project service
-    project="$(ahr_ai_compose config --format json | python3 -c 'import json,sys;print(json.load(sys.stdin)["name"])')"
+    project="$(ahr_compose_project_name)"
     for service in ai-bundle colab-bridge; do
         [[ -z "$(docker ps -q --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=$service")" ]] || \
             ahr_die "Stop $service before starting legacy AI to avoid overlapping scorers."
@@ -16,7 +22,7 @@ ahr_require_legacy_ai_mode() {
 
 ahr_stop_alternative_ai() {
     local project service id
-    project="$(ahr_ai_compose config --format json | python3 -c 'import json,sys;print(json.load(sys.stdin)["name"])')"
+    project="$(ahr_compose_project_name)"
     for service in ai-bundle colab-bridge; do
         id="$(docker ps -q --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=$service")"
         [[ -z "$id" ]] || docker stop --time 20 "$id"

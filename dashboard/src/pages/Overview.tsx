@@ -1,222 +1,220 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
+import { useNavigate } from 'react-router';
+import { Activity, AlertTriangle, FileCheck2, Radio, ShieldAlert } from 'lucide-react';
+import { useApi } from '@/api/query';
+import { fmtCompact, fmtDateTime, fmtNumber, shortId, timeAgo } from '@/lib/format';
+import { isHealthy, scoreTone, severityLabel, severityTone, sourceMeta, toneColor, type Tone } from '@/lib/severity';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/overlays';
 import {
-  ShieldAlert,
-  Activity,
-  Flame,
-  Radio,
-  FileCheck2,
-  AlertTriangle,
-  RefreshCw,
-} from 'lucide-react';
-import { getJson } from '../api/client';
-import { BarList } from '../charts/BarList';
-import { StatCard } from '../components/StatCard';
-import { ScoreGauge } from '../components/ScoreGauge';
-import { TimeseriesChart } from '../components/TimeseriesChart';
-import { Badge } from '../components/Badge';
-import type { OverviewData, Paged, SensorRow, TimeseriesPoint } from '../types/api';
+  BarList,
+  EmptyState,
+  KpiCard,
+  MiniBar,
+  Page,
+  PageHeader,
+  RiskBadge,
+  ScoreGauge,
+  Sparkline,
+  StaleNotice,
+  StatusBadge,
+  StatusDot,
+} from '@/components/soc/primitives';
+import { EventsAreaChart, pivotTimeseries } from '@/components/soc/charts';
+import type { IncidentRow, OverviewData, Paged, SensorRow, TimeseriesPoint } from '@/types/api';
 
-export function Overview({ onNavigate }: { onNavigate?: (view: string) => void }) {
-  const [overview, setOverview] = useState<OverviewData | null>(null);
-  const [timeseries, setTimeseries] = useState<TimeseriesPoint[]>([]);
-  const [sensors, setSensors] = useState<Paged<SensorRow> | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+export function Overview() {
+  const navigate = useNavigate();
+  const overview = useApi<OverviewData>('/api/dashboard/overview');
+  const series = useApi<{ items: TimeseriesPoint[] }>('/api/dashboard/timeseries?minutes=60');
+  const sensors = useApi<Paged<SensorRow>>('/api/sensors');
+  const incidents = useApi<Paged<IncidentRow>>('/api/incidents?page_size=5', 10_000);
 
-  const loadData = () => {
-    setIsLoading(true);
-    Promise.all([
-      getJson<OverviewData>('/api/dashboard/overview').catch(() => null),
-      getJson<{ items: TimeseriesPoint[] }>('/api/dashboard/timeseries?minutes=60').catch(() => ({ items: [] })),
-      getJson<Paged<SensorRow>>('/api/sensors').catch(() => null),
-    ]).then(([ov, ts, sens]) => {
-      if (ov) setOverview(ov);
-      if (ts?.items) setTimeseries(ts.items);
-      if (sens) setSensors(sens);
-      setLastRefreshed(new Date());
-      setIsLoading(false);
-    });
-  };
+  const cards = overview.data?.cards ?? {};
+  const points = series.data?.items ?? [];
+  const sensorRows = sensors.data?.items ?? [];
+  const reporting = sensorRows.filter((row) => isHealthy(row.status)).length;
+  const critical = (cards.critical_alerts ?? 0) > 0 || (cards.critical_incidents ?? 0) > 0;
+  const risk = cards.overall_security_risk;
 
-  useEffect(() => {
-    loadData();
-    const timer = window.setInterval(loadData, 5000);
-    return () => window.clearInterval(timer);
-  }, []);
+  // Per-minute totals feed the event sparkline.
+  const totals = useMemo(() => {
+    const { sources, rows } = pivotTimeseries(points);
+    return rows.map((row) => sources.reduce((sum, source) => sum + Number(row[source] ?? 0), 0));
+  }, [points]);
 
-  const reportingSensors = (sensors?.items ?? []).filter((item) =>
-    ['healthy', 'reporting', 'up', 'running'].includes(item.status.toLowerCase()),
-  ).length;
-
-  const totalSensors = sensors?.items.length ?? 0;
-  const cards = overview?.cards ?? {};
-  const riskScore = cards.overall_security_risk ?? 0;
-  const isCritical = (cards.critical_alerts ?? 0) > 0 || (cards.critical_incidents ?? 0) > 0;
+  const loading = overview.isPending;
 
   return (
-    <div className="soc-page-container">
-      {/* Top Banner Status */}
-      <div className={`soc-status-banner ${isCritical ? 'banner-critical' : 'banner-healthy'}`}>
-        <div className="banner-left">
-          <div className="banner-status-pulse">
-            <span className="pulse-ring" />
-            <span className="pulse-core" />
-          </div>
-          <div>
-            <h2 className="banner-title">
-              {isCritical ? 'HỆ THỐNG PHÁT HIỆN DẤU HIỆU TẤN CÔNG BẤT THƯỜNG' : 'HỆ THỐNG AN NINH HOẠT ĐỘNG BÌNH THƯỜNG'}
-            </h2>
-            <p className="banner-desc">
-              Giám sát hybrid đa tầng: Network (Suricata), Runtime (Falco), Host/SIEM (Wazuh), AI Anomaly Detection trên DVWA Lab.
-            </p>
-          </div>
-        </div>
-        <div className="banner-actions">
-          <span className="text-xs text-slate-400">
-            Cập nhật lúc: {lastRefreshed.toLocaleTimeString()}
-          </span>
-          <button
-            className="soc-btn-ghost btn-sm"
-            onClick={loadData}
-            title="Làm mới ngay"
-            disabled={isLoading}
+    <Page>
+      <PageHeader
+        title="Tổng quan an ninh"
+        description="Giám sát hybrid trên lab DVWA: Network (Suricata), Runtime (Falco), Host/SIEM (Wazuh), Nginx và các mô hình AI."
+        actions={
+          <span
+            className={`inline-flex h-7 items-center gap-2 rounded-md border px-2.5 text-xs font-medium ${
+              critical ? 'border-sev-critical/30 bg-sev-critical/10 text-sev-critical' : 'border-success/30 bg-success/10 text-success'
+            }`}
           >
-            <RefreshCw size={14} className={isLoading ? 'spin-anim' : ''} />
-            Làm mới
-          </button>
-        </div>
-      </div>
+            <StatusDot tone={critical ? 'critical' : 'success'} pulse={critical} />
+            {critical ? 'Phát hiện dấu hiệu tấn công' : 'Hoạt động bình thường'}
+          </span>
+        }
+      />
+      <StaleNotice error={overview.error} hasData={Boolean(overview.data)} />
 
-      {/* KPI Cards Row */}
-      <div className="soc-cards-grid">
-        <StatCard
-          label="TỔNG SỰ KIỆN GHI NHẬN"
-          value={(cards.total_events ?? 0).toLocaleString()}
-          icon={<Activity size={18} />}
-          subtext="Toàn bộ luồng dữ liệu chuẩn hóa"
-          variant="cyan"
-          trend={{ value: `${cards.events_per_min ?? 0}/phút`, isUp: true, isPositive: true }}
-          onClick={() => onNavigate?.('live-events')}
-        />
-        <StatCard
-          label="CẢNH BÁO ĐANG MỞ"
-          value={cards.active_alerts ?? 0}
-          icon={<AlertTriangle size={18} />}
-          subtext={`Trong đó ${cards.critical_alerts ?? 0} mức nguy hiểm cao`}
-          variant={cards.active_alerts ? 'amber' : 'emerald'}
-          badge={cards.critical_alerts ? 'CẦN XỬ LÝ' : 'BÌNH THƯỜNG'}
-          onClick={() => onNavigate?.('live-events')}
-        />
-        <StatCard
-          label="SỰ CỐ AN NINH (INCIDENTS)"
-          value={cards.open_incidents ?? 0}
-          icon={<ShieldAlert size={18} />}
-          subtext={`Chuỗi tấn công liên quan: ${cards.critical_incidents ?? 0}`}
-          variant={cards.critical_incidents ? 'rose' : 'violet'}
-          badge={cards.open_incidents ? 'INVESTIGATING' : 'ZERO OPEN'}
-          onClick={() => onNavigate?.('incidents')}
-        />
-        <StatCard
-          label="SENSORS ĐANG BÁO CÁO"
-          value={`${reportingSensors}/${totalSensors}`}
-          icon={<Radio size={18} />}
-          subtext="Suricata · Falco · Wazuh Agent"
-          variant="emerald"
-          badge={reportingSensors === totalSensors ? '100% ONLINE' : 'DEGRADED'}
-          onClick={() => onNavigate?.('system-health')}
-        />
-        <StatCard
-          label="RULES ĐANG KÍCH HOẠT"
-          value={cards.active_rules ?? 0}
-          icon={<FileCheck2 size={18} />}
-          subtext={`Shadow testing: ${cards.shadow_rules ?? 0} rule`}
-          variant="violet"
-          onClick={() => onNavigate?.('rules')}
-        />
-      </div>
+      <section aria-label="Chỉ số chính" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {loading ? (
+          Array.from({ length: 5 }, (_, index) => <Skeleton key={index} className="h-38" />)
+        ) : (
+          <>
+            <KpiCard
+              label="Tổng sự kiện"
+              value={fmtNumber(cards.total_events)}
+              hint={`${fmtNumber(cards.events_per_min)} sự kiện/phút`}
+              icon={<Activity />}
+              tone="primary"
+              onClick={() => navigate('/events')}
+            >
+              <Sparkline data={totals} />
+            </KpiCard>
+            <KpiCard
+              label="Cảnh báo đang mở"
+              value={fmtNumber(cards.active_alerts)}
+              hint={`${fmtNumber(cards.critical_alerts)} mức nghiêm trọng`}
+              icon={<AlertTriangle />}
+              tone={cards.critical_alerts ? 'critical' : cards.active_alerts ? 'warning' : 'success'}
+              onClick={() => navigate('/events')}
+            >
+              <MiniBar value={(cards.critical_alerts ?? 0) / Math.max(1, cards.active_alerts ?? 0)} tone="critical" />
+            </KpiCard>
+            <KpiCard
+              label="Sự cố đang mở"
+              value={fmtNumber(cards.open_incidents)}
+              hint={`${fmtNumber(cards.critical_incidents)} sự cố nghiêm trọng`}
+              icon={<ShieldAlert />}
+              tone={cards.critical_incidents ? 'critical' : 'neutral'}
+              onClick={() => navigate('/incidents')}
+            >
+              <MiniBar value={(cards.critical_incidents ?? 0) / Math.max(1, cards.open_incidents ?? 0)} tone="critical" />
+            </KpiCard>
+            <KpiCard
+              label="Sensor đang báo cáo"
+              value={sensorRows.length ? `${reporting}/${sensorRows.length}` : '—'}
+              hint={sensorRows.length && reporting === sensorRows.length ? 'Tất cả hoạt động' : 'Có sensor chưa báo cáo'}
+              icon={<Radio />}
+              tone={sensorRows.length && reporting === sensorRows.length ? 'success' : 'warning'}
+              onClick={() => navigate('/health')}
+            >
+              <MiniBar value={sensorRows.length ? reporting / sensorRows.length : 0} tone="success" />
+            </KpiCard>
+            <KpiCard
+              label="Quy tắc Active"
+              value={fmtNumber(cards.active_rules)}
+              hint={`${fmtNumber(cards.shadow_rules)} quy tắc Shadow`}
+              icon={<FileCheck2 />}
+              onClick={() => navigate('/rules')}
+            >
+              <MiniBar value={0} />
+            </KpiCard>
+          </>
+        )}
+      </section>
 
-      {/* Main Grid: Timeseries & Score Gauge */}
-      <div className="soc-grid-2col">
-        {/* Left Column: Events Over Time Chart */}
-        <div className="soc-panel">
-          <div className="panel-header">
-            <div className="flex items-center gap-2">
-              <Activity size={18} className="text-sky-400" />
-              <h3 className="panel-title">Lưu lượng sự kiện theo thời gian (Events/Time)</h3>
-            </div>
-            <Badge variant="cyan" size="sm">
-              60 Phút gần nhất
-            </Badge>
-          </div>
-          <TimeseriesChart data={timeseries} height={240} />
-        </div>
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <Card>
+          <CardHeader title="Sự kiện theo thời gian" description="60 phút gần nhất, xếp chồng theo sensor nguồn" />
+          <CardContent>
+            {series.isPending ? <Skeleton className="h-72.5" /> : <EventsAreaChart points={points} />}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader title="Rủi ro tổng hợp" description="Fusion AI kết hợp rule correlation" />
+          <CardContent className="flex flex-col items-center gap-3 pt-2">
+            <ScoreGauge value={risk} />
+            <RiskBadge level={risk == null ? null : scoreTone(risk)} />
+          </CardContent>
+        </Card>
+      </section>
 
-        {/* Right Column: Security Risk Gauge */}
-        <div className="soc-panel flex flex-col justify-center items-center">
-          <div className="panel-header w-full">
-            <div className="flex items-center gap-2">
-              <Flame size={18} className="text-amber-400" />
-              <h3 className="panel-title">Mức độ rủi ro hệ thống (Risk Score)</h3>
-            </div>
-          </div>
-          <div className="py-2 flex justify-center items-center w-full">
-            <ScoreGauge
-              score={riskScore}
-              size={190}
-              label="Chỉ số nguy cơ tổng hợp"
-              sublabel="Kết hợp từ AI Fusion + Rule Correlations"
+      <section className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <Card>
+          <CardHeader title="Sự kiện theo sensor" description="Toàn bộ lịch sử thu thập" />
+          <CardContent>
+            <BarList
+              items={(overview.data?.events_by_source ?? []).map((row) => ({
+                label: sourceMeta(row.source).label,
+                value: row.count,
+                color: sourceMeta(row.source).color,
+              }))}
             />
-          </div>
-        </div>
-      </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader title="Cảnh báo theo mức độ" description="Severity chuẩn hóa thang 1–10" />
+          <CardContent>
+            <BarList
+              items={(overview.data?.alerts_by_severity ?? []).map((row) => ({
+                label: `${row.severity} · ${severityLabel(row.severity)}`,
+                value: row.count,
+                color: toneColor[severityTone(row.severity) as Tone],
+              }))}
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader title="IP nguồn nhiều nhất" description="Theo số sự kiện ghi nhận" />
+          <CardContent>
+            <BarList
+              mono
+              color="var(--color-sev-high)"
+              empty="Chưa ghi nhận IP nguồn."
+              items={(overview.data?.top_source_ips ?? []).map((row) => ({ label: row.src_ip || 'Chưa ghi nhận IP', value: row.count }))}
+            />
+          </CardContent>
+        </Card>
+      </section>
 
-      {/* Distribution Breakdown Grid */}
-      <div className="soc-grid-3col">
-        {/* Panel 1: Events by Source */}
-        <div className="soc-panel">
-          <div className="panel-header">
-            <h3 className="panel-title">Sự kiện theo Sensor nguồn</h3>
-            <span className="panel-subtitle">24 Giờ qua</span>
-          </div>
-          <BarList
-            items={(overview?.events_by_source ?? []).map((x) => ({
-              label: x.source.toUpperCase(),
-              value: x.count,
-            }))}
-            colorVariant="cyan"
-          />
-        </div>
-
-        {/* Panel 2: Alerts by Severity */}
-        <div className="soc-panel">
-          <div className="panel-header">
-            <h3 className="panel-title">Cảnh báo theo Mức độ nghiêm trọng</h3>
-            <span className="panel-subtitle">Thang điểm 1 - 10</span>
-          </div>
-          <BarList
-            items={(overview?.alerts_by_severity ?? []).map((x) => ({
-              label: `Mức ${x.severity}`,
-              value: x.count,
-            }))}
-            colorVariant="severity"
-          />
-        </div>
-
-        {/* Panel 3: Top Threat Source IPs */}
-        <div className="soc-panel">
-          <div className="panel-header">
-            <h3 className="panel-title">Top Địa chỉ IP Nguồn</h3>
-            <span className="panel-subtitle">Lưu lượng tấn công / truy vấn</span>
-          </div>
-          <BarList
-            items={(overview?.top_source_ips ?? []).map((x) => ({
-              label: x.src_ip || '127.0.0.1 (local)',
-              value: x.count,
-            }))}
-            colorVariant="amber"
-          />
-        </div>
-      </div>
-    </div>
+      <Card>
+        <CardHeader
+          title="Sự cố gần đây"
+          description={`${fmtCompact(incidents.data?.total)} sự cố đã tương quan`}
+          actions={
+            <button type="button" onClick={() => navigate('/incidents')} className="text-xs text-primary hover:underline">
+              Xem tất cả
+            </button>
+          }
+        />
+        <CardContent className="px-0">
+          {incidents.isPending ? (
+            <Skeleton className="mx-4 h-24" />
+          ) : !incidents.data?.items.length ? (
+            <EmptyState title="Chưa có sự cố nào được tương quan" description="Sự cố xuất hiện khi correlation engine gom đủ sự kiện liên quan." />
+          ) : (
+            <ul>
+              {incidents.data.items.map((incident) => (
+                <li key={incident.incident_id}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/incidents/${encodeURIComponent(incident.incident_id)}`)}
+                    className="flex w-full items-center gap-3 border-t border-border/60 px-4 py-2.5 text-left hover:bg-hover/50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px] font-medium text-foreground">{incident.title}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        <span className="font-mono">{shortId(incident.incident_id, 14)}</span> · {fmtNumber(incident.event_count)} sự kiện ·{' '}
+                        <span title={fmtDateTime(incident.last_seen)}>{timeAgo(incident.last_seen)}</span>
+                      </div>
+                    </div>
+                    <RiskBadge level={incident.risk_score == null ? null : scoreTone(incident.risk_score)} />
+                    <StatusBadge status={incident.status} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </Page>
   );
 }

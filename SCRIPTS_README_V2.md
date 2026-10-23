@@ -4,7 +4,22 @@
 `start_system.sh`, `check_system.sh`, `test_attacks.sh` và `wazuh_dashboard.sh`
 không tồn tại trong repository hiện tại.
 
-## Khởi động
+## Khởi động nhanh (một lệnh)
+
+```bash
+bash start.sh              # bật toàn bộ: lab, sensors, pipeline, backend, AI
+bash start.sh status       # trạng thái container và URL
+bash start.sh stop         # tắt toàn bộ, giữ volume
+bash start.sh --help       # tùy chọn: --ai, --build-dashboard, --wazuh-api, --open
+```
+
+Trong PowerShell dùng `.\start.ps1` (cùng tham số), không gõ `bash start.sh`:
+lệnh `bash` của PowerShell là WSL, thường không thấy Docker Desktop. Có thể
+double-click `start.cmd`. Cả hai đều gọi `start.sh` qua Git Bash.
+AI mặc định chọn bundle Colab v2 nếu đã cài hoặc có `dist/ahr-models-v2.zip`,
+ngược lại dùng model legacy.
+
+## Khởi động từng bước
 
 ```bash
 bash ./scripts/start_lab.sh

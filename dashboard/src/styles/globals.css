@@ -1,0 +1,143 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   AHR-IDPS SOC design tokens (dark only).
+   Severity and sensor colors are the single source for badges, charts and
+   legends; components must use these tokens instead of raw palette colors.
+   ========================================================================== */
+
+@theme {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-background: #060a14;
+  --color-sidebar: #0a1020;
+  --color-card: #0d1424;
+  --color-muted: #162036;
+  --color-hover: #1b2742;
+  --color-border: rgb(255 255 255 / 0.1);
+  --color-border-strong: rgb(255 255 255 / 0.2);
+  --color-foreground: #f3f6fc;
+  --color-muted-foreground: #a9b5cc;
+  --color-subtle: #8593b0;
+
+  /* Accent: active nav, focus, charts and tone="primary". Primary buttons are light (foreground on background). */
+  --color-primary: #7fb0ff;
+  --color-primary-foreground: #060a14;
+  --color-ring: rgb(127 176 255 / 0.45);
+
+  --color-success: #4ade9b;
+  --color-warning: #e8c547;
+
+  --color-sev-critical: #f2616a;
+  --color-sev-high: #f59a4b;
+  --color-sev-medium: #e8c547;
+  --color-sev-low: #6fa8f5;
+  --color-sev-info: #8892a6;
+
+  --color-src-suricata: #b58cff;
+  --color-src-falco: #3fd0c9;
+  --color-src-wazuh: #6c8cff;
+  --color-src-nginx: #9bdb5a;
+  --color-src-docker: #7fb2e5;
+  --color-src-other: #8892a6;
+
+  --radius-lg: 0.625rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.375rem;
+
+  --animate-fade-in: fade-in 160ms ease-out;
+  --animate-sheet-in: sheet-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-pop-in: pop-in 160ms ease-out;
+  --animate-row-flash: row-flash 1.6s ease-out;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes sheet-in {
+    from { transform: translateX(24px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes pop-in {
+    from { transform: translateY(4px) scale(0.98); opacity: 0; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
+  }
+  @keyframes row-flash {
+    from { background-color: rgb(127 176 255 / 0.14); }
+    to { background-color: transparent; }
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-background);
+    background-image:
+      radial-gradient(1000px 680px at 88% -14%, rgb(46 98 235 / 0.5), transparent 62%),
+      radial-gradient(820px 600px at -6% 108%, rgb(80 60 210 / 0.38), transparent 62%),
+      radial-gradient(700px 460px at 45% 45%, rgb(30 70 160 / 0.16), transparent 70%);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: rgb(127 176 255 / 0.3);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+}
+
+/* Frosted glass surface: translucent fill, bright top edge, soft depth. */
+@utility glass {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.075), rgb(255 255 255 / 0.028));
+  border: 1px solid rgb(255 255 255 / 0.1);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), 0 24px 48px -28px rgb(0 0 0 / 0.7);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility eyebrow {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--color-subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Glowing chart strokes */
+.recharts-area-curve {
+  filter: drop-shadow(0 0 6px rgb(127 176 255 / 0.4));
+}

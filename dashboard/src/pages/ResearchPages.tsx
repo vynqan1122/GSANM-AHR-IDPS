@@ -1,98 +1,120 @@
-import { useEffect, useState } from 'react';
-import { getJson, postJson } from '../api/client';
-import type { AlertRow, ContainerRow, EventRow, ExperimentRow, ModelRow, Paged, SensorRow } from '../types/api';
-import { AttackGraph, type GraphData } from '../components/AttackGraph';
-
-const val = (x: unknown) => x === undefined || x === null ? '' : String(x);
-const pct = (x: unknown) => typeof x === 'number' ? x.toFixed(3) : '';
-
-export function AlertsPage() {
-  const [rows, setRows] = useState<AlertRow[]>([]);
-  useEffect(() => { getJson<Paged<AlertRow>>('/api/alerts?page_size=25').then((d) => setRows(d.items)).catch(() => setRows([])); }, []);
-  return <section className="table-shell"><h2>Alerts</h2><table><thead><tr><th>Time</th><th>Source</th><th>Rule</th><th>Severity</th><th>Src</th><th>Dst</th><th>Incident</th><th>Status</th></tr></thead><tbody>{rows.map((r) => <tr key={r.alert_id}><td>{r.timestamp}</td><td>{r.source}</td><td>{r.title ?? r.rule_id}</td><td>{r.severity}</td><td>{r.src_ip}</td><td>{r.dst_ip}</td><td></td><td>{r.status}</td></tr>)}</tbody></table></section>;
-}
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { FlaskConical, Play, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
+import { useApi } from '@/api/query';
+import { postJson } from '@/api/client';
+import { fmtPct, fmtScore } from '@/lib/format';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/overlays';
+import { AttackGraph, type GraphData } from '@/components/AttackGraph';
+import { SimpleBarChart } from '@/components/soc/charts';
+import { DataTable, type Column } from '@/components/soc/DataTable';
+import { EmptyState, Mono, Page, PageHeader, StaleNotice, StatusBadge, Truncate } from '@/components/soc/primitives';
+import type { ExperimentRow } from '@/types/api';
 
 export function AttackGraphPage() {
-  const [data, setData] = useState<GraphData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const load = async () => {
-    setLoading(true); setError('');
-    try { setData(await getJson<GraphData>('/api/attack-graph')); }
-    catch { setError('Không tải được graph. Kiểm tra API/backend rồi bấm Tải lại.'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { void load(); }, []);
-  return <section className="table-shell web-attack-page">
-    <h2>20 request tấn công đầu tiên</h2>
-    <p>Toàn bộ lịch sử web đã thu thập, từ cũ đến mới. Chỉ thể hiện request HTTP có bằng chứng rule hoặc điểm Fusion đạt ngưỡng.</p>
-    <button type="button" disabled={loading} onClick={load}>{loading ? 'Đang tải…' : 'Tải lại graph'}</button>
-    {error ? <p role="alert">{error}</p> : !loading || data ? <AttackGraph graph={data} /> : <p role="status">Đang đọc sự kiện…</p>}
-  </section>;
-}
-
-export function NetworkPage() {
-  const [data, setData] = useState<any>(null);
-  useEffect(() => { getJson('/api/network/summary').then(setData).catch(() => setData(null)); }, []);
-  return <section className="table-shell"><h2>Network</h2><p>Flows/sec: {pct(data?.summary?.flows_per_sec)} · Bytes/sec: {pct(data?.summary?.bytes_per_sec)} · Suricata alerts: {val(data?.summary?.suricata_alerts)}</p><pre>{JSON.stringify({ protocols: data?.protocols, top_sources: data?.top_sources, top_destinations: data?.top_destinations, top_destination_ports: data?.top_destination_ports }, null, 2)}</pre></section>;
-}
-
-export function ContainersPage() {
-  const [rows, setRows] = useState<ContainerRow[]>([]);
-  useEffect(() => { getJson<{items: ContainerRow[]}>('/api/containers').then((d) => setRows(d.items)).catch(() => setRows([])); }, []);
-  return <section className="table-shell"><h2>Containers</h2><table><thead><tr><th>Name</th><th>Image</th><th>Status</th><th>CPU</th><th>RAM</th><th>RX</th><th>TX</th><th>Process count</th><th>Falco alerts</th><th>Risk</th></tr></thead><tbody>{rows.map((r) => <tr key={r.name}><td>{r.name}</td><td>{r.image}</td><td>observed</td><td>n/a</td><td>n/a</td><td>n/a</td><td>n/a</td><td>n/a</td><td>{r.falco_alert_count ?? 0}</td><td>{pct(r.current_risk)}</td></tr>)}</tbody></table></section>;
-}
-
-export function AIMonitorPage() {
-  const [rows, setRows] = useState<ModelRow[]>([]);
-  useEffect(() => { getJson<{items: ModelRow[]}>('/api/models').then((d) => setRows(d.items)).catch(() => setRows([])); }, []);
-  return <section className="table-shell"><h2>AI Monitor</h2><table><thead><tr><th>Model</th><th>Version</th><th>Status</th><th>Latency</th><th>Throughput</th><th>Precision</th><th>Recall</th><th>F1</th><th>FPR</th><th>ROC-AUC</th><th>PR-AUC</th></tr></thead><tbody>{rows.map((m) => <tr key={m.model_id}><td>{m.name}</td><td>{m.version}</td><td>{m.status}</td><td>{val((m.artifact_metrics as any)?.latency_ms)}</td><td>{val((m.artifact_metrics as any)?.throughput_eps)}</td><td>{pct((m.artifact_metrics as any)?.precision)}</td><td>{pct((m.artifact_metrics as any)?.recall)}</td><td>{pct((m.artifact_metrics as any)?.f1)}</td><td>{pct((m.artifact_metrics as any)?.fpr)}</td><td>{pct((m.artifact_metrics as any)?.roc_auc)}</td><td>{pct((m.artifact_metrics as any)?.pr_auc)}</td></tr>)}</tbody></table><p>Score exploration: distributions, attack-vs-benign, FP/FN, confidence histogram.</p></section>;
-}
-
-export function ExperimentsPage() {
-  const [rows, setRows] = useState<ExperimentRow[]>([]);
-  const [path, setPath] = useState('');
-  const load = () => getJson<{items: ExperimentRow[]}>('/api/experiments').then((d) => setRows(d.items)).catch(() => setRows([]));
-  useEffect(() => { load(); }, []);
-  const run = async () => { try { const result = await postJson<any>('/api/experiments/run'); setPath(result.results_path); await load(); } catch { setPath('experiment run unavailable'); } };
-  return <section className="table-shell"><h2>Experiments</h2><button onClick={run}>Run ablation E1–E9</button><p>Results CSV: {path || rows[0]?.results_path || 'not generated yet'}</p><table><thead><tr><th>ID</th><th>Name</th><th>Precision</th><th>Recall</th><th>F1</th><th>FPR</th></tr></thead><tbody>{rows.map((r) => <tr key={r.experiment_id}><td>{r.experiment_id}</td><td>{r.name}</td><td>{pct(r.metrics?.precision)}</td><td>{pct(r.metrics?.recall)}</td><td>{pct(r.metrics?.f1)}</td><td>{pct(r.metrics?.fpr)}</td></tr>)}</tbody></table><p>Unknown attack before/after generated-rule effectiveness is exported with recall, FPR, latency, rule coverage, and AI inference requirement.</p></section>;
-}
-
-export function SystemHealthPage() {
-  const [data, setData] = useState<any>(null);
-  useEffect(() => { const load = () => getJson('/api/system/health').then(setData).catch(() => setData({ overall: 'degraded', services: {} })); load(); const t = window.setInterval(load, 10000); return () => window.clearInterval(t); }, []);
-  return <section className="table-shell"><h2>System Health</h2><p>Overall: {data?.overall}</p><pre>{JSON.stringify(data?.services ?? {}, null, 2)}</pre></section>;
-}
-
-export function WazuhManagerPage() {
-  const [sensors, setSensors] = useState<SensorRow[]>([]);
-  const [events, setEvents] = useState<EventRow[]>([]);
-  const wazuh = sensors.find((row) => row.sensor === 'wazuh');
-
-  useEffect(() => {
-    const load = () => {
-      getJson<Paged<SensorRow>>('/api/sensors').then((data) => setSensors(data.items)).catch(() => setSensors([]));
-      getJson<Paged<EventRow>>('/api/events?source=wazuh&page_size=12').then((data) => setEvents(data.items)).catch(() => setEvents([]));
-    };
-    load();
-    const timer = window.setInterval(load, 10000);
-    return () => window.clearInterval(timer);
-  }, []);
-
+  const query = useApi<GraphData>('/api/attack-graph', 0);
   return (
-    <section className="table-shell">
-      <h2>Wazuh Manager</h2>
-      <p>Status: {wazuh?.status ?? 'unknown'} · Last event: {wazuh?.last_event_at ?? 'unknown'}</p>
-      <table>
-        <thead><tr><th>Time</th><th>Rule</th><th>Severity</th><th>Container</th></tr></thead>
-        <tbody>{events.map((event) => <tr key={event.event_id}>
-          <td>{event.timestamp}</td><td>{event.rule?.name ?? event.rule?.rule_id ?? ''}</td><td>{event.severity ?? ''}</td><td>{event.container?.name ?? ''}</td>
-        </tr>)}</tbody>
-      </table>
-    </section>
+    <Page>
+      <PageHeader
+        title="20 request tấn công đầu tiên"
+        description="Toàn bộ lịch sử web đã thu thập, từ cũ đến mới. Chỉ vẽ request HTTP có bằng chứng rule hoặc Fusion score đạt ngưỡng; đây là phát hiện nghi vấn, chưa xác nhận khai thác thành công."
+        actions={
+          <Button onClick={() => void query.refetch()} disabled={query.isFetching}>
+            <RefreshCw className={query.isFetching ? 'animate-spin' : ''} /> Tải lại graph
+          </Button>
+        }
+      />
+      <StaleNotice error={query.error} hasData={Boolean(query.data)} />
+      <Card>
+        <CardContent className="pt-4">
+          {query.isPending ? <Skeleton className="h-80" /> : <AttackGraph graph={query.data} />}
+        </CardContent>
+      </Card>
+    </Page>
   );
 }
 
-export function SettingsPage() {
-  return <section className="table-shell"><h2>Settings</h2><p>Resource profiles: light · normal · research. GPU target: RTX 3060 12GB with lazy loading, batch inference, torch.inference_mode, mixed precision where appropriate, and model unload controls at service layer.</p><p>Security: DVWA local-only, restricted CORS-ready API, allowlisted response actions, parameterized SQL, no arbitrary shell/firewall/Docker command API.</p></section>;
+const DESCRIPTIONS: Record<string, string> = {
+  E1_rule_only: 'Chỉ dùng tập luật signature (Suricata + Falco)',
+  E2_network_ai_only: 'Chỉ dùng Network AI',
+  E3_log_ai_only: 'Chỉ dùng Log AI',
+  E4_graph_ai_only: 'Chỉ dùng Graph AI',
+  E5_rule_network: 'Rule + Network AI',
+  E6_rule_network_log: 'Rule + Network AI + Log AI',
+  E7_rule_network_log_graph: 'Bốn thành phần, chưa có rule tự sinh',
+  E8_full_hybrid: 'Hybrid đầy đủ',
+  E9_full_hybrid_generated_rules: 'Hybrid đầy đủ + generated rules',
+};
+
+export function ExperimentsPage() {
+  const client = useQueryClient();
+  const query = useApi<{ items: ExperimentRow[] }>('/api/experiments', 0);
+  const rows = query.data?.items ?? [];
+
+  const run = useMutation({
+    mutationFn: () => postJson<{ results_path?: string }>('/api/experiments/run'),
+    onSuccess: (result) => {
+      toast.success('Đã chạy xong ablation E1–E9', { description: result.results_path ? `Kết quả: ${result.results_path}` : undefined });
+      void client.invalidateQueries({ queryKey: ['/api/experiments'] });
+    },
+    onError: (error) => toast.error('Không chạy được thực nghiệm', { description: error instanceof Error ? error.message : 'Lỗi kết nối runner' }),
+  });
+
+  const columns: Column<ExperimentRow>[] = [
+    { key: 'id', header: 'Mã', width: '84px', cell: (r) => <Mono className="font-semibold text-primary">{r.experiment_id.split('_')[0]}</Mono> },
+    { key: 'name', header: 'Cấu hình', width: 'minmax(220px, 1.6fr)', cell: (r) => (
+      <div className="min-w-0 leading-tight">
+        <Truncate text={r.name || r.experiment_id} className="font-medium" />
+        <div className="truncate text-[11px] text-subtle">{DESCRIPTIONS[r.experiment_id] ?? ''}</div>
+      </div>
+    ), },
+    { key: 'precision', header: 'Precision', width: '88px', align: 'right', cell: (r) => <span className="num">{fmtPct(r.metrics?.precision)}</span> },
+    { key: 'recall', header: 'Recall', width: '88px', align: 'right', cell: (r) => <span className="num">{fmtPct(r.metrics?.recall)}</span> },
+    { key: 'f1', header: 'F1', width: '88px', align: 'right', cell: (r) => <span className="num font-medium">{fmtPct(r.metrics?.f1)}</span> },
+    { key: 'fpr', header: 'FPR', width: '88px', align: 'right', cell: (r) => <span className="num">{fmtPct(r.metrics?.fpr)}</span> },
+    { key: 'status', header: 'Trạng thái', width: '112px', cell: (r) => <StatusBadge status={r.status} /> },
+  ];
+
+  const chart = rows
+    .filter((row) => typeof row.metrics?.f1 === 'number')
+    .map((row) => ({ label: row.experiment_id.split('_')[0], value: Number(fmtScore(row.metrics?.f1, 3)) }));
+  const resultsPath = rows.find((row) => row.results_path)?.results_path;
+
+  return (
+    <Page>
+      <PageHeader
+        title="Thực nghiệm E1–E9"
+        description="Ablation: đánh giá đóng góp của từng thành phần và toàn bộ hệ thống. Bảng chỉ hiển thị kết quả đã được runner ghi lại."
+        actions={
+          <Button variant="default" onClick={() => run.mutate()} disabled={run.isPending}>
+            {run.isPending ? <RefreshCw className="animate-spin" /> : <Play />}
+            {run.isPending ? 'Đang chạy…' : 'Chạy E1–E9'}
+          </Button>
+        }
+      />
+      <StaleNotice error={query.error} hasData={Boolean(query.data)} />
+
+      {chart.length > 0 && (
+        <Card>
+          <CardHeader title="F1 theo cấu hình" description={resultsPath ? `Nguồn: ${resultsPath}` : undefined} />
+          <CardContent><SimpleBarChart data={chart} valueLabel="F1" /></CardContent>
+        </Card>
+      )}
+
+      <Card className="overflow-hidden">
+        <DataTable
+          label="Kết quả ablation"
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.experiment_id}
+          loading={query.isPending}
+          minWidth={820}
+          maxHeight={560}
+          empty={<EmptyState icon={<FlaskConical />} title="Chưa có kết quả thực nghiệm" description="Bấm “Chạy E1–E9” để runner sinh ma trận đánh giá và ghi results.csv." />}
+        />
+      </Card>
+    </Page>
+  );
 }

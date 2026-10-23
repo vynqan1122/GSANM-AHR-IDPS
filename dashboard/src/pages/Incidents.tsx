@@ -1,368 +1,295 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { Clock, FileText, GitBranch, Search, Sparkles } from 'lucide-react';
+import { useApi } from '@/api/query';
+import { fmtDateTime, fmtDuration, fmtNumber, fmtScore, shortId, timeAgo } from '@/lib/format';
+import { scoreTone } from '@/lib/severity';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Input, Segmented } from '@/components/ui/input';
+import { Skeleton, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/overlays';
+import { AttackGraph } from '@/components/AttackGraph';
+import { DataTable, type Column } from '@/components/soc/DataTable';
+import { EventDetailSheet } from '@/components/soc/EventDetailSheet';
 import {
-  ShieldAlert,
-  Clock,
-  Crosshair,
-  FileText,
-  Activity,
-  Layers,
-  Sparkles,
-} from 'lucide-react';
-import { getJson } from '../api/client';
-import { AttackGraph } from '../components/AttackGraph';
-import { Badge, riskVariant, statusVariant } from '../components/Badge';
-import type { IncidentRow, Paged } from '../types/api';
+  CopyButton,
+  EmptyState,
+  Field,
+  JsonView,
+  Mono,
+  Page,
+  PageHeader,
+  RiskBadge,
+  SectionLabel,
+  SeverityBadge,
+  SourceBadge,
+  StaleNotice,
+  StatusBadge,
+  Truncate,
+} from '@/components/soc/primitives';
+import type { EventRow, IncidentRow, Paged } from '@/types/api';
 
-function formatDuration(start?: string, end?: string) {
-  if (!start || !end) return '—';
-  const ms = new Date(end).getTime() - new Date(start).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return '0s';
-  const sec = Math.round(ms / 1000);
-  if (sec < 60) return `${sec}s`;
-  const min = Math.floor(sec / 60);
-  return `${min}m ${sec % 60}s`;
-}
+type TimelineStep = {
+  timestamp?: string;
+  event_type?: string;
+  source?: string;
+  severity?: number;
+  fusion_score?: number;
+  risk_level?: string;
+  action?: string;
+  description?: string;
+};
+
+const STATUS_OPTIONS = ['all', 'open', 'investigating', 'contained', 'resolved'] as const;
+const statusText: Record<string, string> = {
+  all: 'Tất cả',
+  open: 'Đang mở',
+  investigating: 'Điều tra',
+  contained: 'Khoanh vùng',
+  resolved: 'Đã xử lý',
+};
 
 export function Incidents() {
-  const [incidents, setIncidents] = useState<IncidentRow[]>([]);
-  const [selectedIncident, setSelectedIncident] = useState<IncidentRow | null>(null);
-  const [activeTab, setActiveTab] = useState<'graph' | 'timeline' | 'evidence' | 'ai'>('graph');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [isLoading, setIsLoading] = useState(false);
+  const { incidentId } = useParams();
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const [status, setStatus] = useState<string>('all');
+  const [event, setEvent] = useState<EventRow | null>(null);
+  const query = params.get('q') ?? '';
 
-  const loadIncidents = async () => {
-    setIsLoading(true);
-    try {
-      const data = await getJson<Paged<IncidentRow>>('/api/incidents?page_size=50');
-      setIncidents(data.items || []);
-      if (data.items?.length && !selectedIncident) {
-        // Load first incident with details
-        openIncident(data.items[0].incident_id);
-      }
-    } catch {
-      setIncidents([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const list = useApi<Paged<IncidentRow>>('/api/incidents?page_size=50', 10_000);
+  const detail = useApi<IncidentRow>(incidentId ? `/api/incidents/${encodeURIComponent(incidentId)}` : null, 10_000);
+  const incidents = list.data?.items ?? [];
 
-  useEffect(() => {
-    loadIncidents();
-    const timer = window.setInterval(loadIncidents, 10000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const rows = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return incidents.filter((incident) => {
+      if (status !== 'all' && incident.status?.toLowerCase() !== status) return false;
+      if (!term) return true;
+      return [incident.incident_id, incident.title, incident.attack_type, ...(incident.source_ips ?? []), ...(incident.targets ?? [])].some((value) =>
+        value?.toLowerCase().includes(term),
+      );
+    });
+  }, [incidents, status, query]);
 
-  const openIncident = async (incidentId: string) => {
-    try {
-      const full = await getJson<IncidentRow>(`/api/incidents/${incidentId}`);
-      setSelectedIncident(full);
-    } catch {
-      // fallback to current in list
-      const fallback = incidents.find((i) => i.incident_id === incidentId);
-      if (fallback) setSelectedIncident(fallback);
-    }
-  };
+  const open = (id: string) => navigate(`/incidents/${encodeURIComponent(id)}${params.toString() ? `?${params}` : ''}`);
 
-  const filteredIncidents = incidents.filter((inc) => {
-    if (statusFilter === 'all') return true;
-    return inc.status?.toLowerCase() === statusFilter.toLowerCase();
-  });
+  const columns: Column<IncidentRow>[] = [
+    { key: 'risk', header: 'Rủi ro', width: '64px', cell: (i) => (i.risk_score == null ? <span className="text-subtle">—</span> : <Badge tone={scoreTone(i.risk_score)} className="num">{fmtScore(i.risk_score)}</Badge>) },
+    {
+      key: 'title',
+      header: 'Sự cố',
+      width: 'minmax(220px, 1fr)',
+      cell: (i) => (
+        <div className="min-w-0 leading-tight">
+          <Truncate text={i.title || 'Phát hiện bất thường'} className="font-medium" />
+          <div className="mt-0.5 truncate text-[11px] text-subtle">
+            <span className="font-mono">{shortId(i.incident_id, 16)}</span> · {i.attack_type || 'chưa phân loại'}
+          </div>
+        </div>
+      ),
+    },
+    { key: 'events', header: 'Sự kiện', width: '64px', align: 'right', cell: (i) => <span className="num">{fmtNumber(i.event_count)}</span> },
+    { key: 'status', header: 'Trạng thái', width: '112px', cell: (i) => <StatusBadge status={i.status} /> },
+  ];
 
   return (
-    <div className="soc-page-container">
-      {/* Top Filter and Stats Bar */}
-      <div className="soc-filter-bar">
-        <div className="filter-group-left">
-          <div className="flex items-center gap-2">
-            <ShieldAlert size={18} className="text-rose-400" />
-            <h3 className="text-sm font-bold text-white tracking-wide">
-              QUẢN LÝ SỰ CỐ & CHUỖI TẤN CÔNG (CORRELATED INCIDENTS)
-            </h3>
-          </div>
-          <Badge variant="critical" size="sm">
-            {incidents.filter((i) => (i.risk_score ?? 0) >= 0.7).length} Sự cố nguy cấp
-          </Badge>
-        </div>
+    <Page>
+      <PageHeader
+        title="Sự cố & chuỗi tấn công"
+        description="Các sự cố do correlation engine gom từ sự kiện của nhiều sensor. Chọn một sự cố để xem graph, timeline, giải thích AI và bằng chứng."
+      />
+      <StaleNotice error={list.error} hasData={Boolean(list.data)} />
 
-        <div className="filter-group-right">
-          <div className="source-filter-tabs">
-            {['all', 'open', 'investigating', 'contained', 'resolved'].map((st) => (
-              <button
-                key={st}
-                className={`tab-btn ${statusFilter === st ? 'is-active' : ''}`}
-                onClick={() => setStatusFilter(st)}
-              >
-                {st === 'all' ? 'Tất cả' : st.toUpperCase()}
-              </button>
-            ))}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(500px,0.85fr)_minmax(0,1.4fr)]">
+        <Card className="flex min-w-0 flex-col overflow-hidden xl:sticky xl:top-0 xl:max-h-[calc(100vh-14rem)]">
+          <div className="flex flex-col gap-2 border-b border-border p-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-subtle" />
+              <Input
+                value={query}
+                onChange={(e) => {
+                  const next = new URLSearchParams(params);
+                  if (e.target.value) next.set('q', e.target.value);
+                  else next.delete('q');
+                  setParams(next, { replace: true });
+                }}
+                placeholder="Tìm theo mã, tiêu đề, IP, loại tấn công…"
+                className="pl-8"
+                aria-label="Tìm sự cố"
+              />
+            </div>
+            <Segmented
+              label="Lọc theo trạng thái"
+              value={status}
+              onChange={setStatus}
+              options={STATUS_OPTIONS.map((value) => ({ value, label: statusText[value] }))}
+            />
+            <div className="num text-xs text-muted-foreground">
+              {rows.length} / {fmtNumber(list.data?.total)} sự cố
+            </div>
           </div>
+          <DataTable
+            label="Danh sách sự cố"
+            columns={columns}
+            rows={rows}
+            rowKey={(i) => i.incident_id}
+            selectedKey={incidentId}
+            onRowClick={(i) => open(i.incident_id)}
+            rowHeight={52}
+            minWidth={440}
+            maxHeight="calc(100vh - 21rem)"
+            loading={list.isPending}
+            empty={<EmptyState title="Không có sự cố phù hợp" description="Thử đổi bộ lọc trạng thái hoặc từ khóa." />}
+          />
+        </Card>
+
+        <div className="min-w-0">
+          {!incidentId ? (
+            <Card>
+              <EmptyState className="py-20" icon={<GitBranch />} title="Chọn một sự cố" description="Danh sách bên trái cho phép mở graph attack chain, timeline và bằng chứng của từng sự cố." />
+            </Card>
+          ) : detail.isPending ? (
+            <Skeleton className="h-96" />
+          ) : detail.error && !detail.data ? (
+            <Card>
+              <EmptyState className="py-20" title="Không tải được sự cố" description={`Mã ${incidentId} không tồn tại hoặc API đang lỗi.`} />
+            </Card>
+          ) : detail.data ? (
+            <IncidentDetail incident={detail.data} onEvent={setEvent} />
+          ) : null}
         </div>
       </div>
 
-      {/* Main Split Layout: Incidents Table (Top or Left) + Incident Detail (Bottom or Right) */}
-      <div className="soc-incidents-layout">
-        {/* Incident List Table */}
-        <div className="soc-panel p-0 overflow-hidden">
-          <div className="panel-header px-4 py-3 border-b border-slate-800">
-            <span className="font-semibold text-sm text-slate-200">
-              Danh sách các sự cố an ninh ({filteredIncidents.length})
-            </span>
-            <span className="text-xs text-slate-400">Chọn sự cố để mở đồ thị lan truyền</span>
-          </div>
+      <EventDetailSheet event={event} onClose={() => setEvent(null)} />
+    </Page>
+  );
+}
 
-          <div className="table-responsive max-h-72">
-            <table className="soc-table">
-              <thead>
-                <tr>
-                  <th>Mã Incident</th>
-                  <th>Tiêu đề sự cố</th>
-                  <th>Loại tấn công</th>
-                  <th>IP Nguồn (Attacker)</th>
-                  <th>Mục tiêu (Target)</th>
-                  <th>Mức rủi ro</th>
-                  <th>Số sự kiện</th>
-                  <th>Thời lượng</th>
-                  <th>Trạng thái</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredIncidents.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="text-center py-6 text-slate-400">
-                      {isLoading ? 'Đang tải danh sách sự cố...' : 'Không có sự cố nào được ghi nhận.'}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredIncidents.map((inc) => {
-                    const isSelected = selectedIncident?.incident_id === inc.incident_id;
-                    return (
-                      <tr
-                        key={inc.incident_id}
-                        onClick={() => openIncident(inc.incident_id)}
-                        className={`clickable-row ${isSelected ? 'row-selected' : ''}`}
-                      >
-                        <td className="font-mono text-xs text-sky-400 font-semibold">
-                          {inc.incident_id.slice(0, 8)}…
-                        </td>
-                        <td className="font-medium text-white">{inc.title || 'Phát hiện bất thường'}</td>
-                        <td>
-                          <span className="attack-type-badge">
-                            <Crosshair size={12} />
-                            {inc.attack_type || 'Unknown'}
-                          </span>
-                        </td>
-                        <td className="font-mono text-xs text-slate-300">
-                          {inc.source_ips?.join(', ') || '127.0.0.1'}
-                        </td>
-                        <td className="text-xs text-emerald-400">
-                          {inc.targets?.join(', ') || 'dvwa_web'}
-                        </td>
-                        <td>
-                          <Badge variant={riskVariant(inc.risk_score)} size="sm">
-                            {(inc.risk_score ?? 0).toFixed(2)}
-                          </Badge>
-                        </td>
-                        <td className="font-mono text-xs text-slate-300">{inc.event_count}</td>
-                        <td className="text-xs text-slate-400">
-                          {formatDuration(inc.first_seen, inc.last_seen)}
-                        </td>
-                        <td>
-                          <Badge variant={statusVariant(inc.status)} size="sm" dot>
-                            {inc.status?.toUpperCase() || 'OPEN'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+function IncidentDetail({ incident, onEvent }: { incident: IncidentRow; onEvent: (event: EventRow) => void }) {
+  const timeline = (incident.timeline ?? []) as TimelineStep[];
+  const events = (incident.events ?? []) as EventRow[];
+  const edgeCount = incident.attack_graph?.edges?.length ?? 0;
+
+  const eventColumns: Column<EventRow>[] = [
+    { key: 'time', header: 'Thời gian', width: '150px', cell: (e) => <Mono className="text-muted-foreground">{fmtDateTime(e.timestamp)}</Mono> },
+    { key: 'source', header: 'Sensor', width: '96px', cell: (e) => <SourceBadge source={e.source} /> },
+    { key: 'type', header: 'Loại sự kiện', width: 'minmax(140px, 1fr)', cell: (e) => <Truncate text={e.event_type} /> },
+    { key: 'ip', header: 'IP nguồn', width: '130px', cell: (e) => (e.src_ip ? <Mono>{e.src_ip}</Mono> : <span className="text-subtle">—</span>) },
+    { key: 'severity', header: 'Severity', width: '72px', cell: (e) => <SeverityBadge severity={e.severity} /> },
+  ];
+
+  return (
+    <Card className="min-w-0 overflow-hidden">
+      <div className="flex flex-col gap-3 border-b border-border p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1 text-xs text-subtle">
+              <span className="font-mono">{incident.incident_id}</span>
+              <CopyButton value={incident.incident_id} label="Sao chép mã sự cố" />
+            </div>
+            <h2 className="mt-0.5 text-base leading-snug font-semibold wrap-anywhere">{incident.title}</h2>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <RiskBadge level={incident.risk_score == null ? null : scoreTone(incident.risk_score)} />
+            <StatusBadge status={incident.status} />
           </div>
         </div>
-
-        {/* Selected Incident Detail View */}
-        {selectedIncident ? (
-          <div className="soc-panel incident-detail-card">
-            {/* Header of Detail Card */}
-            <div className="incident-header-banner">
-              <div className="incident-header-left">
-                <span className="incident-id-tag font-mono">
-                  INCIDENT #{selectedIncident.incident_id}
-                </span>
-                <h2 className="incident-title-text">{selectedIncident.title}</h2>
-                <div className="incident-meta-row">
-                  <span className="meta-pill">
-                    <Clock size={12} />
-                    Bắt đầu: {selectedIncident.first_seen?.replace('T', ' ').slice(0, 19)}
-                  </span>
-                  <span className="meta-pill">
-                    Thời lượng: {formatDuration(selectedIncident.first_seen, selectedIncident.last_seen)}
-                  </span>
-                  <span className="meta-pill">
-                    <Layers size={12} />
-                    {selectedIncident.event_count} Sự kiện liên quan
-                  </span>
-                </div>
-              </div>
-
-              <div className="incident-header-right">
-                <div className="text-right">
-                  <span className="text-xs text-slate-400 block mb-1">Mức độ rủi ro (Risk Score)</span>
-                  <Badge variant={riskVariant(selectedIncident.risk_score)} size="md">
-                    {(selectedIncident.risk_score ?? 0).toFixed(2)} / 1.0
-                  </Badge>
-                </div>
-                <Badge variant={statusVariant(selectedIncident.status)} size="md" dot>
-                  {selectedIncident.status?.toUpperCase()}
-                </Badge>
-              </div>
-            </div>
-
-            {/* Navigation Tabs for Detail View */}
-            <div className="detail-tabs-bar">
-              <button
-                className={`detail-tab ${activeTab === 'graph' ? 'active' : ''}`}
-                onClick={() => setActiveTab('graph')}
-              >
-                <Activity size={14} />
-                Đồ thị Attack Chain (Graph)
-              </button>
-              <button
-                className={`detail-tab ${activeTab === 'timeline' ? 'active' : ''}`}
-                onClick={() => setActiveTab('timeline')}
-              >
-                <Clock size={14} />
-                Dòng thời gian (Timeline)
-              </button>
-              <button
-                className={`detail-tab ${activeTab === 'ai' ? 'active' : ''}`}
-                onClick={() => setActiveTab('ai')}
-              >
-                <Sparkles size={14} />
-                Giải thích AI & Rules
-              </button>
-              <button
-                className={`detail-tab ${activeTab === 'evidence' ? 'active' : ''}`}
-                onClick={() => setActiveTab('evidence')}
-              >
-                <FileText size={14} />
-                Sự kiện chứng cứ ({selectedIncident.events?.length ?? 0})
-              </button>
-            </div>
-
-            {/* Tab 1: Attack Chain Graph */}
-            {activeTab === 'graph' && (
-              <div className="tab-pane-content">
-                <div className="text-xs text-slate-400 mb-2 font-mono">
-                  Tối đa 20 request HTTP tấn công đầu tiên của sự cố này. Xem toàn bộ lịch sử tại Graph 20 request.
-                </div>
-                <AttackGraph graph={selectedIncident.attack_graph} />
-              </div>
-            )}
-
-            {/* Tab 2: Attack Timeline */}
-            {activeTab === 'timeline' && (
-              <div className="tab-pane-content">
-                <div className="soc-timeline">
-                  {selectedIncident.timeline && selectedIncident.timeline.length > 0 ? (
-                    (selectedIncident.timeline as any[]).map((step, idx) => (
-                      <div className="timeline-step" key={idx}>
-                        <div className="timeline-dot" />
-                        <div className="timeline-content">
-                          <span className="timeline-time font-mono text-xs text-slate-400">
-                            {step.timestamp || `Giai đoạn ${idx + 1}`}
-                          </span>
-                          <h4 className="timeline-action text-white text-sm font-semibold">
-                            {step.action || step.event_type || 'Hành vi phát hiện'}
-                          </h4>
-                          <p className="timeline-desc text-xs text-slate-300">
-                            {step.description || JSON.stringify(step)}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="py-6 text-center text-slate-400">
-                      Chuỗi sự kiện đang được phân tích tự động vào timeline.
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Tab 3: AI Explanation & Triggered Rules */}
-            {activeTab === 'ai' && (
-              <div className="tab-pane-content">
-                <div className="soc-grid-2col">
-                  <div className="soc-card-inner">
-                    <h4 className="card-inner-title flex items-center gap-2">
-                      <Sparkles size={16} className="text-purple-400" />
-                      Phân tích suy luận từ AI (AI Summary & SHAP)
-                    </h4>
-                    <pre className="soc-raw-code">
-                      {JSON.stringify(selectedIncident.ai_summary || { note: 'Không có bất thường phụ từ AI' }, null, 2)}
-                    </pre>
-                  </div>
-
-                  <div className="soc-card-inner">
-                    <h4 className="card-inner-title flex items-center gap-2">
-                      <ShieldAlert size={16} className="text-sky-400" />
-                      Quy tắc phát hiện liên quan (Triggered Rules)
-                    </h4>
-                    <pre className="soc-raw-code">
-                      {JSON.stringify(selectedIncident.rule_summary || { note: 'Quy tắc tương quan mặc định' }, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Tab 4: Evidence Events */}
-            {activeTab === 'evidence' && (
-              <div className="tab-pane-content">
-                <div className="table-responsive">
-                  <table className="soc-table">
-                    <thead>
-                      <tr>
-                        <th>Thời gian</th>
-                        <th>Nguồn</th>
-                        <th>Loại sự kiện</th>
-                        <th>Quan hệ tương quan</th>
-                        <th>IP Nguồn</th>
-                        <th>Severity</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(selectedIncident.events ?? []).map((ev: any) => (
-                        <tr key={ev.event_id}>
-                          <td className="font-mono text-xs">{ev.timestamp?.slice(0, 19)}</td>
-                          <td>
-                            <span className={`sensor-tag sensor-${ev.source?.toLowerCase()}`}>
-                              {ev.source?.toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="text-white text-xs">{ev.event_type}</td>
-                          <td className="text-sky-300 text-xs font-semibold">{ev.relationship || 'CORRELATED'}</td>
-                          <td className="font-mono text-xs">{ev.src_ip || '—'}</td>
-                          <td>
-                            <Badge variant={riskVariant(ev.severity)} size="sm">
-                              {ev.severity ?? 0}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="soc-panel text-center py-12 text-slate-400">
-            Chọn một sự cố từ danh sách ở trên để xem chi tiết chuỗi tấn công và bằng chứng.
-          </div>
-        )}
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <Field label="Rủi ro">
+            <span className="num">{fmtScore(incident.risk_score)}</span> / 1.00
+          </Field>
+          <Field label="Bắt đầu">{fmtDateTime(incident.first_seen)}</Field>
+          <Field label="Thời lượng">{fmtDuration(incident.first_seen, incident.last_seen)}</Field>
+          <Field label="Sự kiện liên quan">
+            <span className="num">{fmtNumber(incident.event_count)}</span>
+          </Field>
+        </div>
+        <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            Loại tấn công: <span className="text-foreground">{incident.attack_type || 'chưa phân loại'}</span>
+          </span>
+          <span>
+            IP nguồn: <span className="font-mono text-foreground">{incident.source_ips?.join(', ') || 'chưa ghi nhận'}</span>
+          </span>
+          <span>
+            Mục tiêu: <span className="text-foreground">{incident.targets?.join(', ') || 'chưa ghi nhận'}</span>
+          </span>
+        </div>
       </div>
-    </div>
+
+      <Tabs defaultValue="graph">
+        <TabsList>
+          <TabsTrigger value="graph">
+            <GitBranch /> Attack chain
+          </TabsTrigger>
+          <TabsTrigger value="timeline">
+            <Clock /> Timeline
+          </TabsTrigger>
+          <TabsTrigger value="ai">
+            <Sparkles /> AI & Rules
+          </TabsTrigger>
+          <TabsTrigger value="evidence">
+            <FileText /> Bằng chứng <span className="num text-subtle">{events.length}</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="graph">
+          <p className="mb-3 text-xs text-muted-foreground">
+            Attack graph edges: <span className="num text-foreground">{edgeCount}</span> · tối đa 20 request HTTP đầu tiên của sự cố này. Toàn bộ lịch sử ở trang Graph 20 request.
+          </p>
+          <AttackGraph graph={incident.attack_graph} />
+        </TabsContent>
+
+        <TabsContent value="timeline">
+          {timeline.length === 0 ? (
+            <EmptyState title="Chưa có timeline" description="Chuỗi sự kiện sẽ xuất hiện khi correlation engine phân tích xong." />
+          ) : (
+            <ol className="relative ml-2 flex max-h-130 flex-col gap-4 overflow-y-auto border-l border-border pl-5">
+              {timeline.map((step, index) => (
+                <li key={index} className="relative">
+                  <span className="absolute top-1.5 -left-6.25 size-2 rounded-full bg-primary ring-4 ring-card" />
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-subtle">
+                    <Mono className="text-muted-foreground">{fmtDateTime(step.timestamp) !== '—' ? fmtDateTime(step.timestamp) : `Giai đoạn ${index + 1}`}</Mono>
+                    {step.source && <SourceBadge source={step.source} />}
+                    {step.severity != null && <SeverityBadge severity={step.severity} />}
+                    {step.risk_level && <RiskBadge level={step.risk_level} />}
+                  </div>
+                  <div className="mt-1 text-[13px] font-medium">{step.action || step.event_type || 'Hành vi được phát hiện'}</div>
+                  {step.description && <p className="text-xs text-muted-foreground">{step.description}</p>}
+                  {step.fusion_score != null && <p className="num text-xs text-subtle">Fusion score {fmtScore(step.fusion_score)}</p>}
+                </li>
+              ))}
+            </ol>
+          )}
+        </TabsContent>
+
+        <TabsContent value="ai">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <section>
+              <SectionLabel>Tóm tắt AI</SectionLabel>
+              <JsonView value={incident.ai_summary ?? { note: 'Không có tóm tắt AI cho sự cố này.' }} />
+            </section>
+            <section>
+              <SectionLabel>Rule liên quan</SectionLabel>
+              <JsonView value={incident.rule_summary ?? { note: 'Không có rule khớp.' }} />
+            </section>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="evidence" className="px-0 pb-0">
+          <DataTable
+            label="Sự kiện bằng chứng"
+            columns={eventColumns}
+            rows={events}
+            rowKey={(e) => e.event_id}
+            onRowClick={onEvent}
+            maxHeight={440}
+            minWidth={640}
+            empty={<EmptyState title="Chưa có sự kiện bằng chứng" />}
+          />
+        </TabsContent>
+      </Tabs>
+    </Card>
   );
 }

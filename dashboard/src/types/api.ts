@@ -129,7 +129,10 @@ export interface ModelRow {
   model_type?: string;
   version?: string;
   status?: string;
-  artifact_metrics?: unknown;
+  artifact_uri?: string | null;
+  artifact_metrics?: Record<string, unknown> | null;
+  training_metadata?: { metrics?: Record<string, unknown>; training_rows?: number; source?: string; [key: string]: unknown } | null;
+  activated_at?: string | null;
 }
 
 export interface ExperimentRow {
