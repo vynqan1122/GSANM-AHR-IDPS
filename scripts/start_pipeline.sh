@@ -68,4 +68,4 @@ ahr_pipeline_compose up \
     collector normalizer
 
 ahr_pipeline_compose ps collector normalizer
-ahr_info "Phase 3 pipeline is healthy. Run scripts/verify_phase3.sh for real-event acceptance."
+ahr_info "Pipeline is healthy."

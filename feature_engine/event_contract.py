@@ -82,3 +82,24 @@ def learning_event(event):
         for k in list(raw):
             if k.lower() in SENSITIVE:raw.pop(k)
     return row
+
+
+def sanitized_event(event):
+    """Canonical allowlist for training/remote inference; no raw body or credentials."""
+    e=learning_event(event)
+    out={k:e.get(k) for k in ('event_id','timestamp','source','event_type','category','protocol',
+                              'src_ip','dst_ip','src_port','dst_port','severity','http','network','rule')}
+    h=out.get('http') or {}
+    h={k:h.get(k) for k in ('method','uri','status','request_length','response_length')}
+    h['uri']=clean_uri(h.get('uri',''))
+    out['http']=h
+    for key in ('container','process'):
+        obj=e.get(key) or {}
+        out[key]={k:obj[k] for k in ('name','parent_name','image') if obj.get(k)} or None
+    rule=out.get('rule')
+    if isinstance(rule,dict):
+        out['rule']={k:rule[k] for k in ('rule_id','name','category','confidence','engine') if k in rule}
+    out['raw_event']={}
+    for key in ('scenario_id','campaign_id','label','attack_type'):
+        if key in event:out[key]=event[key]
+    return out

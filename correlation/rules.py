@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import os
 from feature_engine.event_contract import routine_navigation
 
 
@@ -18,6 +19,8 @@ def actionable_event(event: dict[str, Any]) -> bool:
 def risk_score(event: dict[str, Any]) -> float:
     ai = event.get("ai") if isinstance(event.get("ai"), dict) else {}
     severity = float(event.get("severity") or 0) / 10.0
+    if os.getenv('INCIDENT_SENSOR_ONLY', 'false').lower() == 'true':
+        return max(0.0, min(1.0, severity))
     fusion = ai.get("fusion_score")
     graph = ai.get("graph_score")
     log = ai.get("log_score")

@@ -1,1 +1,0 @@
-"""Normalizer unit tests."""

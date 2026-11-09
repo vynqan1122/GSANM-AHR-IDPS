@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -13,7 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from ai.graph.dataset import row_to_event
+from feature_engine.event_contract import decode_event
 from ai.network.config import Settings
 from ai.network.db import connect
 
@@ -86,7 +87,12 @@ def rule_matches(engine: str, content: str, event: dict[str, Any]) -> bool:
         http = event.get("http") if isinstance(event.get("http"), dict) else {}
         uri = str(http.get("uri") or http.get("url") or "")
         method = str(http.get("method") or "")
-        return bool(uri and any(token in uri for token in ("/vulnerabilities", "/login", "/healthz"))) and (not method or method in content)
+        # shortcut: replay supports generated literal HTTP templates only; require native PCAP replay before deployment.
+        expected_method = re.search(r'http\.method;\s*content:"([^"\\|]+)";', content)
+        expected_uri = re.search(r'http\.uri;\s*content:"([^"\\|]+)";\s*startswith;', content)
+        if not expected_method or not expected_uri:
+            return False
+        return method == expected_method.group(1) and uri.startswith(expected_uri.group(1))
     if engine == "falco":
         process = event.get("process") if isinstance(event.get("process"), dict) else {}
         return bool(process and str(process.get("name") or process.get("command_line") or "")[:32] in content)
@@ -168,7 +174,7 @@ async def load_validation_events(connection: Any) -> list[dict[str, Any]]:
     )
     events = []
     for row in rows:
-        event = row_to_event(row)
+        event = decode_event(dict(row))
         event["attack_label"] = bool(row["attack_label"])
         events.append(event)
     return events
@@ -184,7 +190,7 @@ async def validate_rule(rule_id: str, thresholds: dict[str, float] | None = None
         engine = rule["engine"]
         await connection.execute("UPDATE ahr.rules SET status = 'validating', updated_at = now() WHERE rule_id = $1", rule_id)
         syntax = syntax_check(engine, content)
-        events = await load_validation_events(connection)
+        events = await load_validation_events(connection) if syntax.valid else []
         replay = metrics_for(engine, content, events) if syntax.valid else {
             "tp": 0, "fp": 0, "tn": 0, "fn": 0, "precision": 0.0, "recall": 0.0, "f1": 0.0, "fpr": 1.0,
             "support": 0, "match_count": 0, "processing_cost": 0.0,

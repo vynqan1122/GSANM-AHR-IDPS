@@ -85,6 +85,11 @@ class GraphSAGEWindowClassifier:
             raise ValueError("GraphSAGE training requires at least two graphs and both classes")
         graph_x = np.vstack([self.embed_graph(graph) for graph in graphs])
         base_x = np.vstack([self.baseline_features(graph) for graph in graphs])
+        self.fit_vectors(graph_x, base_x, labels)
+
+    def fit_vectors(self, graph_x: np.ndarray, base_x: np.ndarray, labels: np.ndarray) -> None:
+        if len(graph_x)<2 or len(graph_x)!=len(base_x) or len(labels)!=len(graph_x) or len(set(labels.tolist()))<2:
+            raise ValueError('Graph training requires matching feature rows and both classes')
         self.graph_model.fit(graph_x, labels)
         self.baseline_model.fit(base_x, labels)
         self.is_fitted = True

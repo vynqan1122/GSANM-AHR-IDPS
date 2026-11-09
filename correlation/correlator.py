@@ -14,6 +14,8 @@ from ai.network.config import Settings
 from ai.network.db import connect
 
 from .incident_builder import fetch_event, upsert_incident
+from .sessionizer import correlation_key
+from .rules import actionable_event, risk_score
 
 
 def heartbeat(path: Path, status: str = "running", **fields: Any) -> None:
@@ -46,6 +48,7 @@ async def service() -> None:
     heartbeat_path = Path(os.getenv("INCIDENT_HEARTBEAT", "/tmp/incident-heartbeat.json"))
     incident_stream = os.getenv("INCIDENT_STREAM", "security.incidents")
     start_at_end = os.getenv("INCIDENT_START_AT_END", "true").lower() in {"1", "true", "yes"}
+    input_stream = os.getenv('INCIDENT_INPUT_STREAM', settings.predictions_stream)
     redis_client = redis.Redis(
         host=settings.redis_host,
         port=settings.redis_port,
@@ -57,13 +60,15 @@ async def service() -> None:
     processed = 0
     heartbeat(heartbeat_path, "starting", processed=processed)
     try:
-        await prepare_group(redis_client, settings.predictions_stream, group, start_at_end=start_at_end)
+        await prepare_group(redis_client, input_stream, group, start_at_end=start_at_end)
         heartbeat(heartbeat_path, "running", processed=processed)
         while True:
-            records = await redis_client.xreadgroup(
+            records = await redis_client.xreadgroup(group,consumer,{input_stream:'0'},count=50)
+            if not any(messages for _,messages in records):
+                records = await redis_client.xreadgroup(
                 groupname=group,
                 consumername=consumer,
-                streams={settings.predictions_stream: ">"},
+                streams={input_stream: ">"},
                 count=50,
                 block=5000,
             )
@@ -71,38 +76,52 @@ async def service() -> None:
                 heartbeat(heartbeat_path, "running", processed=processed)
                 continue
             for _stream, messages in records:
+                grouped={}
                 for stream_id, fields in messages:
                     try:
-                        event_id = fields.get("event_id")
+                        event_id = fields.get("event_id") or json.loads(fields.get('payload', '{}')).get('event_id')
                         if not event_id:
-                            await redis_client.xack(settings.predictions_stream, group, stream_id)
+                            await redis_client.xack(input_stream, group, stream_id)
                             continue
                         event = await fetch_event(connection, event_id)
                         if event is None:
-                            await redis_client.xack(settings.predictions_stream, group, stream_id)
+                            await redis_client.xack(input_stream, group, stream_id)
                             continue
-                        from .rules import actionable_event
                         if not actionable_event(event):
-                            await redis_client.xack(settings.predictions_stream, group, stream_id)
+                            await redis_client.xack(input_stream, group, stream_id)
                             continue
-                        incident = await upsert_incident(connection, event)
+                        key=correlation_key(event).incident_id
+                        grouped.setdefault(key,[]).append((stream_id,event))
+                    except Exception as exc:
+                        heartbeat(heartbeat_path, "degraded", processed=processed, error_type=exc.__class__.__name__)
+                        await asyncio.sleep(1)
+                        break
+                for group_items in grouped.values():
+                    try:
+                        events=[e for _,e in group_items]
+                        representative=max(events,key=risk_score)
+                        # Refresh one materialized summary per incident in this batch; keep every evidence link.
+                        async with connection.transaction():
+                            incident = await upsert_incident(connection, representative, related_events=events)
                         await redis_client.xadd(
                             incident_stream,
                             {
                                 "incident_id": incident["incident_id"],
-                                "event_id": event_id,
+                                "event_id": representative['event_id'],
                                 "risk_score": f"{incident['risk_score']:.8f}",
                                 "event_count": str(incident["event_count"]),
                             },
                             maxlen=100000,
                             approximate=True,
                         )
-                        processed += 1
-                        await redis_client.xack(settings.predictions_stream, group, stream_id)
-                        heartbeat(heartbeat_path, "running", processed=processed, last_stream_id=stream_id)
+                        processed += len(group_items)
+                        await redis_client.xack(input_stream, group, *(sid for sid,_ in group_items))
+                        heartbeat(heartbeat_path, "running", processed=processed, last_stream_id=group_items[-1][0])
                     except Exception as exc:
                         heartbeat(heartbeat_path, "degraded", processed=processed, error_type=exc.__class__.__name__)
-                        await redis_client.xack(settings.predictions_stream, group, stream_id)
+                        # Retain failed evidence for retry; an error is not a processed incident.
+                        await asyncio.sleep(1)
+                        break
     finally:
         await connection.close()
         await redis_client.aclose()

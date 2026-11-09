@@ -1,11 +1,20 @@
-param([switch]$Install)
+param(
+  [switch]$Install,
+  [string]$BundleDir='experiments/bundles/dvwa-100k-20261022'
+)
 $ErrorActionPreference='Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
+
+if([IO.Path]::IsPathRooted($BundleDir) -or $BundleDir -match '(^|[\\/])\.\.([\\/]|$)'){
+  throw 'BundleDir must be a relative path inside the repository.'
+}
+$bundlePath=Join-Path (Get-Location) $BundleDir
 if($Install) {
-  python scripts/install_model_bundle.py
+  python scripts/install_model_bundle.py --output $BundleDir
   if($LASTEXITCODE -ne 0){throw 'Bundle validation/install failed. Existing models were preserved.'}
 }
-if(-not (Test-Path 'experiments/bundles/colab-v2/manifest.json')){throw 'Run python scripts/install_model_bundle.py first.'}
+if(-not (Test-Path (Join-Path $bundlePath 'manifest.json'))){throw "Missing $BundleDir/manifest.json. Install a verified bundle first."}
+$env:AHR_MODEL_BUNDLE_DIR='./'+($BundleDir -replace '\\','/')
 $ca=@('--env-file','.env')
 foreach($f in 'docker-compose.yml','sensors/suricata/compose.fragment.yml','sensors/falco/compose.fragment.yml','sensors/wazuh/compose.fragment.yml','pipeline/compose.fragment.yml','app/compose.fragment.yml','ai/compose.fragment.yml','ai/compose.bundle.yml'){$ca+=@('-f',$f)}
 docker compose @ca config --quiet

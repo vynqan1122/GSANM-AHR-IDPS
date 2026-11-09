@@ -61,6 +61,9 @@ ahr_random_secret() {
 ahr_replace_env_value() {
     local key="$1"
     local value="$2"
+    if [[ -n "$value" && "$(ahr_env_value "$key")" == "$value" ]]; then
+        return 0
+    fi
     local temporary
     temporary="$(mktemp "${AHR_ENV_FILE}.tmp.XXXXXX")"
 
@@ -78,7 +81,10 @@ ahr_replace_env_value() {
         }
     ' "$AHR_ENV_FILE" > "$temporary"
 
-    mv -- "$temporary" "$AHR_ENV_FILE"
+    if ! mv -- "$temporary" "$AHR_ENV_FILE"; then
+        rm -f -- "$temporary"
+        return 1
+    fi
 }
 
 ahr_prepare_env() {

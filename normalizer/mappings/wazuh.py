@@ -27,6 +27,7 @@ def map_wazuh(envelope: RawEnvelope) -> SecurityEvent:
     data = envelope.payload
     rule_data = data.get("rule") if isinstance(data.get("rule"), dict) else {}
     event_data = data.get("data") if isinstance(data.get("data"), dict) else {}
+    output_fields = event_data.get('output_fields') if isinstance(event_data.get('output_fields'),dict) else {}
     docker_data = (
         event_data.get("docker") if isinstance(event_data.get("docker"), dict) else {}
     )
@@ -73,10 +74,10 @@ def map_wazuh(envelope: RawEnvelope) -> SecurityEvent:
         ProcessDetails,
         pid=as_int(first(event_data, "pid", "process.pid")),
         ppid=as_int(first(event_data, "ppid", "process.ppid")),
-        name=as_str(first(event_data, "process.name", "program_name")),
-        parent_name=as_str(first(event_data, "process.parent_name")),
+        name=as_str(first(event_data, "process.name", "program_name") or output_fields.get('proc.name')),
+        parent_name=as_str(first(event_data, "process.parent_name") or output_fields.get('proc.pname')),
         exe=as_str(first(event_data, "process.executable", "exe")),
-        cmdline=as_str(first(event_data, "process.command_line", "command")),
+        cmdline=as_str(first(event_data, "process.command_line", "command") or output_fields.get('proc.cmdline')),
     )
     user = nonempty(
         UserDetails,

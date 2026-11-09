@@ -310,6 +310,7 @@ async def list_rules(
     page_size: int,
     status: str | None = None,
     source: str | None = None,
+    search: str | None = None,
 ) -> dict[str, Any]:
     safe_page, safe_size, offset = _page(page, page_size)
     clauses = []
@@ -320,6 +321,9 @@ async def list_rules(
     if source:
         clauses.append("r.source = :source")
         params["source"] = source
+    if search:
+        clauses.append('(r.rule_id ILIKE :search OR r.name ILIKE :search OR r.engine ILIKE :search)')
+        params['search'] = f'%{search.strip()}%'
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     total = await session.scalar(text(f"SELECT count(*) FROM ahr.rules r {where}"), params)
     result = await session.execute(
@@ -328,9 +332,10 @@ async def list_rules(
             SELECT r.rule_id, r.engine, r.name, r.description, r.status,
                    r.source, r.origin, r.generator, r.pattern, r.support,
                    r.confidence, r.model_versions, r.parent_rule_id,
-                   r.shadow_metrics, r.promotion_requires_approval,
+                   r.shadow_metrics, r.promotion_requires_approval, r.disabled_reason,
                    r.current_version, r.created_at, r.updated_at,
                    rv.content, rv.metadata AS version_metadata,
+                   vr.rule_version AS validation_rule_version,
                    vr.status AS validation_status,
                    vr.syntax_valid AS validation_syntax_valid,
                    vr.replay_metrics AS validation_replay_metrics
@@ -338,7 +343,7 @@ async def list_rules(
             LEFT JOIN ahr.rule_versions rv
               ON rv.rule_id = r.rule_id AND rv.version = r.current_version
             LEFT JOIN LATERAL (
-                SELECT status, syntax_valid, replay_metrics
+                SELECT rule_version, status, syntax_valid, replay_metrics
                 FROM ahr.rule_validation_runs
                 WHERE rule_id = r.rule_id
                 ORDER BY started_at DESC
@@ -366,9 +371,10 @@ async def get_rule(session: AsyncSession, rule_id: str) -> dict[str, Any] | None
             SELECT r.rule_id, r.engine, r.name, r.description, r.status,
                    r.source, r.origin, r.generator, r.pattern, r.support,
                    r.confidence, r.model_versions, r.parent_rule_id,
-                   r.shadow_metrics, r.promotion_requires_approval,
+                   r.shadow_metrics, r.promotion_requires_approval, r.disabled_reason,
                    r.current_version, r.created_at, r.updated_at,
                    rv.content, rv.metadata AS version_metadata,
+                   vr.rule_version AS validation_rule_version,
                    vr.status AS validation_status,
                    vr.syntax_valid AS validation_syntax_valid,
                    vr.replay_metrics AS validation_replay_metrics
@@ -376,7 +382,7 @@ async def get_rule(session: AsyncSession, rule_id: str) -> dict[str, Any] | None
             LEFT JOIN ahr.rule_versions rv
               ON rv.rule_id = r.rule_id AND rv.version = r.current_version
             LEFT JOIN LATERAL (
-                SELECT status, syntax_valid, replay_metrics
+                SELECT rule_version, status, syntax_valid, replay_metrics
                 FROM ahr.rule_validation_runs
                 WHERE rule_id = r.rule_id
                 ORDER BY started_at DESC

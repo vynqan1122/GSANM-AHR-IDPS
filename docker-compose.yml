@@ -15,6 +15,10 @@ services:
   nginx:
     <<: *service-defaults
     image: ${NGINX_IMAGE:?Set NGINX_IMAGE in .env}
+    command:
+      - /bin/sh
+      - -ec
+      - touch /var/log/ahr-idps/access.jsonl; exec nginx -g 'daemon off;'
     depends_on:
       dvwa:
         condition: service_healthy
@@ -157,9 +161,9 @@ services:
       - data
     cap_drop:
       - NET_RAW
-    mem_limit: 1g
+    mem_limit: ${AHR_POSTGRES_MEMORY:-1g}
     mem_reservation: 256m
-    cpus: 2.0
+    cpus: ${AHR_POSTGRES_CPUS:-2.0}
     pids_limit: 512
     healthcheck:
       test:
@@ -200,7 +204,7 @@ services:
       - NET_RAW
     # Redis retains the lab event streams and needs headroom for RDB/AOF
     # background rewrites; 1 GiB was insufficient once the retained stream grew.
-    mem_limit: 2g
+    mem_limit: ${AHR_REDIS_MEMORY:-2g}
     mem_reservation: 128m
     cpus: 1.0
     pids_limit: 256

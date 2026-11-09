@@ -3,6 +3,7 @@ export interface EventRow {
   timestamp: string;
   source: string;
   event_type: string;
+  http?: { uri?: string; url?: string; method?: string; status?: number } | null;
   src_ip?: string | null;
   dst_ip?: string | null;
   container?: { name?: string; image?: string } | null;
@@ -18,6 +19,8 @@ export interface EventRow {
     risk_level?: string | null;
     fusion_breakdown?: unknown;
   } | null;
+  /** Only present on events returned inside an incident's evidence list. */
+  relationship?: string | null;
 }
 
 export interface Paged<T> {
@@ -59,6 +62,9 @@ export interface IncidentRow {
 }
 
 export interface RuleRow {
+  description?: string | null;
+  current_version: number;
+  validation_rule_version?: number | null;
   rule_id: string;
   engine: string;
   name: string;
@@ -73,9 +79,27 @@ export interface RuleRow {
   content?: string | null;
   shadow_metrics?: unknown;
   promotion_requires_approval?: boolean;
+  automation?: {
+    stage: string;
+    label: string;
+    reason: string;
+    profile_supported: boolean;
+    model_current: boolean;
+    native_passed: boolean;
+    enabled: boolean;
+    worker_fresh: boolean;
+    enforcing: boolean;
+    lease_remaining_seconds: number;
+    shadow: { elapsed_seconds: number; matches: number; nonmatches: number; unique: number; ready: boolean };
+    native_failure?: { reason: string; created_at: string; details: unknown } | null;
+  };
   validation_status?: string | null;
   validation_syntax_valid?: boolean | null;
   validation_replay_metrics?: {
+      tp?: number;
+      tn?: number;
+      fp?: number;
+      fn?: number;
     precision?: number;
     recall?: number;
     fpr?: number;
@@ -129,7 +153,10 @@ export interface ModelRow {
   model_type?: string;
   version?: string;
   status?: string;
-  artifact_metrics?: unknown;
+  artifact_uri?: string | null;
+  artifact_metrics?: Record<string, unknown> | null;
+  training_metadata?: { metrics?: Record<string, unknown>; training_rows?: number; source?: string; [key: string]: unknown } | null;
+  activated_at?: string | null;
 }
 
 export interface ExperimentRow {

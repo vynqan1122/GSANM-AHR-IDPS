@@ -44,4 +44,4 @@ ahr_info "Starting Wazuh manager and its local sensor integrations..."
 ahr_sensors_compose up --detach --wait --wait-timeout 300 --force-recreate --no-deps wazuh-manager
 
 ahr_sensors_compose ps suricata falco wazuh-manager
-ahr_info "Phase 2 sensors are healthy. Run scripts/verify_phase2.sh for real-event acceptance."
+ahr_info "Sensors are healthy."

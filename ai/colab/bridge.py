@@ -18,6 +18,7 @@ from ai.network.config import Settings
 from ai.network.db import connect
 from feature_engine.event_contract import decode_event,routine_navigation
 from .data import sanitized_event
+from correlation.rules import actionable_event
 
 MODELS={'network_score':('colab-network-v2','network_detection'),
         'log_score':('colab-log-v2','log_anomaly'),
@@ -44,30 +45,49 @@ def validate_response(events,payload):
     return by_id
 
 
-async def persist(connection,client,settings,event,item,latency,provider='colab'):
-    scores={k:float(item['scores'][k]) for k in MODELS}
-    version=item['bundle_version']
+async def persist(connection,client,settings,event,item,latency,provider='colab',register_models=True):
+    await persist_batch(connection,client,settings,[event],{event['event_id']:item},latency,provider,register_models)
+
+
+async def persist_batch(connection,client,settings,events,by_id,latency,provider='colab',register_models=True,fusion_threshold=.55):
+    predictions=[];updates=[];messages=[]
+    version=by_id[events[0]['event_id']]['bundle_version']
+    for event in events:
+        item=by_id[event['event_id']]
+        if item['bundle_version']!=version:raise ValueError('Mixed bundle versions in one batch')
+        scores={k:float(item['scores'][k]) for k in MODELS}
+        for key,(mid,task) in MODELS.items():
+            if provider=='local':mid=mid.replace('colab-','local-')
+            score=scores[key];threshold=fusion_threshold if key=='fusion_score' else .5
+            predictions.append((f'{mid}:{version}:{event["event_id"]}',event['event_id'],mid,version,task,score,
+                'attack' if score>=threshold else 'benign','high' if score>=.8 else 'medium' if score>=threshold else 'low',
+                max(score,1-score),json.dumps({'inference_batch_ms' if provider=='local' else 'remote_roundtrip_ms':latency,'provider':provider,
+                                             'graph_context':'single_event_causal_v2','routine_navigation':routine_navigation(event)})))
+        update={**scores,'risk_level':'high' if scores['fusion_score']>=fusion_threshold else 'low',
+                'fusion_threshold':fusion_threshold,'model_versions':{provider:version}}
+        updates.append((event['event_id'],json.dumps(update)))
+        if actionable_event({**event,'ai':{**(event.get('ai') or {}),**scores}}):
+            messages.append({'event_id':event['event_id'],'model':f'{provider}-fusion-v2',
+                             'fusion_score':str(scores['fusion_score']),'version':version})
     async with connection.transaction():
         for key,(mid,task) in MODELS.items():
             if provider=='local':mid=mid.replace('colab-','local-')
-            score=scores[key];threshold=.55 if key=='fusion_score' else .5
-            await connection.execute('''INSERT INTO ahr.models(model_id,name,model_type,version,status,artifact_uri,feature_schema,training_metadata,activated_at)
+            if register_models:
+                await connection.execute('''INSERT INTO ahr.models(model_id,name,model_type,version,status,artifact_uri,feature_schema,training_metadata,activated_at)
                 VALUES($1,$1,$3,$2,'active',$4,'{}'::jsonb,$5::jsonb,now())
                 ON CONFLICT(model_id) DO UPDATE SET version=excluded.version,status='active',model_type=excluded.model_type,
                     artifact_uri=excluded.artifact_uri,training_metadata=excluded.training_metadata ''',
                 mid,version,'local-bundle-v2' if provider=='local' else 'colab-remote-v2',
                 'local:verified-v2-bundle' if provider=='local' else 'https:remote-ephemeral',json.dumps({'provider':provider}))
-            await connection.execute('''INSERT INTO ahr.ai_predictions(prediction_id,event_id,model_id,model_version,task,score,predicted_class,risk_level,confidence,explanation)
+        await connection.executemany('''INSERT INTO ahr.ai_predictions(prediction_id,event_id,model_id,model_version,task,score,predicted_class,risk_level,confidence,explanation)
                 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) ON CONFLICT(prediction_id) DO NOTHING''',
-                f'{mid}:{version}:{event["event_id"]}',event['event_id'],mid,version,task,score,
-                'attack' if score>=threshold else 'benign','high' if score>=.8 else 'medium' if score>=threshold else 'low',
-                max(score,1-score),json.dumps({'inference_batch_ms' if provider=='local' else 'remote_roundtrip_ms':latency,'provider':provider,
-                                             'graph_context':'single_event_causal_v2','routine_navigation':routine_navigation(event)}))
-        update={**scores,'risk_level':'high' if scores['fusion_score']>=.55 else 'low','model_versions':{provider:version}}
-        await connection.execute('UPDATE ahr.events SET ai=ai || $2::jsonb WHERE event_id=$1',event['event_id'],json.dumps(update))
+                predictions)
+        await connection.executemany('UPDATE ahr.events SET ai=ai || $2::jsonb WHERE event_id=$1',updates)
     # Publish once after complete base+fusion scores. Incident engine still applies local policy.
-    await client.xadd(settings.predictions_stream,{'event_id':event['event_id'],'model':f'{provider}-fusion-v2',
-        'fusion_score':str(scores['fusion_score']),'version':version},maxlen=100000,approximate=True)
+    async with client.pipeline(transaction=False) as pipeline:
+        # Keep enough history for bounded large campaigns without trimming unprocessed incident work.
+        for message in messages:pipeline.xadd(settings.predictions_stream,message,maxlen=500000,approximate=True)
+        await pipeline.execute()
 
 
 async def service(endpoint,token_file,once=False):

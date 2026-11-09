@@ -59,6 +59,11 @@ async def system_health(
             "response_engine": "up" if await session.scalar(text("SELECT EXISTS (SELECT 1 FROM ahr.responses)")) else "unknown",
         }
     )
+    from backend.api.genti import enabled, status
+    if enabled():
+        for key in ('network_ai', 'log_ai', 'graph_ai', 'fusion'):
+            services.pop(key, None)
+        services['genti'] = 'up' if (await status()).get('ready') else 'unavailable'
     overall = "healthy" if services.get("postgres") == "up" and services.get("redis") == "up" and services.get("backend") == "up" else "degraded"
     return {"overall": overall, "status": overall, "services": services,
             "pipeline_activity_evidence": {'last_ingestion_at': latest_ingestion,

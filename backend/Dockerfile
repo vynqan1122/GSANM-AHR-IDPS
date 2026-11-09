@@ -15,5 +15,7 @@ RUN python -m pip install --requirement /tmp/backend-requirements.txt \
 COPY backend ./backend
 COPY correlation ./correlation
 COPY feature_engine ./feature_engine
+COPY rule_engine ./rule_engine
+COPY ai ./ai
 COPY dataset_collection ./dataset_collection
 COPY dashboard/dist ./dashboard/dist

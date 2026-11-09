@@ -13,6 +13,7 @@ exports/
 notebooks/.ipynb_checkpoints/
 artifacts/http-ids/
 .venv-http/
+.venv-genti/
 .http-ids-backup/
 llm-system/http_ids/config.local.json
 .env.next.*
@@ -22,6 +23,8 @@ sensors/wazuh/secrets/authd.pass
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.docx-qa-*/
+dist/archive/
 .mypy_cache/
 .DS_Store
 Thumbs.db
@@ -29,6 +32,7 @@ Thumbs.db
 # Runtime data and later research artifacts
 evidence/
 datasets/raw/*
+datasets/campaigns/
 datasets/processed/*
 datasets/labels/*
 datasets/graphs/*
@@ -47,3 +51,16 @@ restore-backups/
 llm-system/.env
 llm-system/.venv-http/
 llm-system/artifacts/
+.venv-genti/
+
+# Keep model weights and operational evidence outside source control
+*.gguf
+*.safetensors
+*.pt
+*.pcap
+*.pcapng
+*.zip
+experiments/genti/*
+!experiments/genti/.gitkeep
+tests/
+**/tests/

@@ -23,8 +23,8 @@ from .pattern_miner import mine_patterns
 from .templates import falco, suricata, wazuh
 
 
-GENERATOR = "ahr-rulegen-v1"
-MODEL_VERSIONS = {"fusion": "fusion-v1", "graph": "graphsage-v1", "rule_generator": GENERATOR, "genti": GENTI_VERSION}
+GENERATOR = "ahr-rulegen"
+MODEL_VERSIONS = {"rule_generator": GENERATOR, "genti": GENTI_VERSION}
 
 
 def sid_for(pattern: dict[str, Any]) -> int:
@@ -47,6 +47,10 @@ async def load_recent_events(connection: Any, *, window_minutes: int, limit: int
         SELECT *
         FROM ahr.events
         WHERE timestamp >= now() - ($1::int * interval '1 minute')
+          AND ai->'model_versions'->>'local' = (
+              SELECT version FROM ahr.models
+              WHERE model_id = 'local-fusion-v2' AND status = 'active'
+          )
         ORDER BY timestamp DESC
         LIMIT $2
         """,
@@ -59,12 +63,13 @@ async def load_recent_events(connection: Any, *, window_minutes: int, limit: int
 async def store_candidate(connection: Any, pattern: dict[str, Any], content: str, engine: str) -> str:
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
     rule_id = "gen-" + hashlib.sha256((engine + digest).encode("utf-8")).hexdigest()[:24]
+    model_versions = {**MODEL_VERSIONS, **pattern.get('model_versions', {})}
     metadata = {
         "pattern": pattern,
         "genti_context": build_context(pattern),
         "support": pattern["support"],
         "confidence": pattern["confidence"],
-        "model_versions": MODEL_VERSIONS,
+        "model_versions": model_versions,
         "explanation": explain(pattern, support=pattern["support"], confidence=pattern["confidence"]),
     }
     await connection.execute(
@@ -75,7 +80,6 @@ async def store_candidate(connection: Any, pattern: dict[str, Any], content: str
         )
         VALUES ($1,$2,$3,$4,'candidate','generated',$5::text,$6::varchar,$5::varchar,$7::jsonb,$8,$9,$10::jsonb,NULL)
         ON CONFLICT (rule_id) DO UPDATE SET
-            status = 'candidate',
             source = 'generated',
             pattern = excluded.pattern,
             support = excluded.support,
@@ -92,16 +96,13 @@ async def store_candidate(connection: Any, pattern: dict[str, Any], content: str
         json.dumps(pattern),
         int(pattern["support"]),
         float(pattern["confidence"]),
-        json.dumps(MODEL_VERSIONS),
+        json.dumps(model_versions),
     )
     await connection.execute(
         """
         INSERT INTO ahr.rule_versions(rule_id, version, content, content_sha256, metadata, created_by)
         VALUES ($1,1,$2,$3,$4::jsonb,$5)
-        ON CONFLICT (rule_id, version) DO UPDATE SET
-            content = excluded.content,
-            content_sha256 = excluded.content_sha256,
-            metadata = excluded.metadata
+        ON CONFLICT (rule_id, version) DO NOTHING
         """,
         rule_id,
         content,
@@ -132,9 +133,11 @@ async def generate_once(
     try:
         events = await load_recent_events(connection, window_minutes=window_minutes)
         for pattern in mine_patterns(events, min_support=min_support, min_confidence=min_confidence)[:max_candidates]:
+            example_ids = set(pattern['example_event_ids'])
+            examples = [event for event in events if event['event_id'] in example_ids]
+            pattern['model_versions'] = dict(examples[0]['ai']['model_versions'])
             engine = select_engine(pattern)
             content = render_candidate(pattern, engine)
-            examples = [event for event in events if event["event_id"] in set(pattern["example_event_ids"])]
             if contains_sample_specific_artifact(content, examples):
                 continue
             rule_id = await store_candidate(connection, pattern, content, engine)

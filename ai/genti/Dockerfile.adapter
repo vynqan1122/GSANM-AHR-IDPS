@@ -1,0 +1,2 @@
+FROM ahr-idps/genti:local
+COPY ai/genti /opt/ahr-idps/ai/genti

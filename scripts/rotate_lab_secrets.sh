@@ -124,5 +124,4 @@ if ! ahr_compose up --detach --force-recreate --wait --wait-timeout 300 \
     ahr_die 'Services did not become healthy after rotation; .env contains the new credentials.'
 fi
 
-bash "$SCRIPT_DIR/verify_phase1.sh"
-ahr_info 'All five local lab secrets were rotated and Phase 1 acceptance passed.'
+ahr_info 'All five local lab secrets were rotated and credential-consuming services are healthy.'

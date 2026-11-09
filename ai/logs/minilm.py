@@ -37,4 +37,5 @@ class MiniLMEmbedder:
         return self.cache[key]
 
     def encode(self, texts: list[str]) -> np.ndarray:
-        return np.vstack([self.encode_one(text) for text in texts]).astype(np.float32)
+        # Batch transformation avoids retaining a second 384-float vector per training row in the cache.
+        return self.vectorizer.transform(texts).toarray().astype(np.float32)

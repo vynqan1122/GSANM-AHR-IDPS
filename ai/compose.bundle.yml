@@ -8,9 +8,9 @@ services:
       dockerfile: ai/Dockerfile
     command: [python, -m, ai.colab.local]
     volumes: !override
-      - ./experiments/bundles/colab-v2:/models:ro
+      - ${AHR_MODEL_BUNDLE_DIR:-./experiments/bundles/dvwa-100k-20261022}:/models:ro
     healthcheck:
-      test: [CMD-SHELL, "python -c \"import json,datetime;d=json.load(open('/tmp/local-bundle.json'));t=datetime.datetime.fromisoformat(d['updated']);assert d['status'] in ('running','idle') and (datetime.datetime.now(datetime.timezone.utc)-t).total_seconds()<90\""]
+      test: [CMD-SHELL, "python -c \"import json,datetime;d=json.load(open('/tmp/local-bundle.json'));t=datetime.datetime.fromisoformat(d['updated']);assert d['status'] in ('running','idle','paused') and (datetime.datetime.now(datetime.timezone.utc)-t).total_seconds()<90\""]
       interval: 15s
       timeout: 5s
       retries: 4

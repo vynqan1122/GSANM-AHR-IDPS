@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .attack_chain import build_attack_chain, build_timeline
+from .attack_chain import build_timeline
+from .web_graph import build_web_graph
 from .rules import ai_summary, attack_type, risk_score, rule_summary, title_for
 from .sessionizer import correlation_key, parse_time
 
@@ -55,7 +56,7 @@ async def fetch_incident_events(connection: Any, incident_id: str) -> list[dict[
     return [row_to_event(row) for row in rows]
 
 
-async def upsert_incident(connection: Any, event: dict[str, Any]) -> dict[str, Any]:
+async def upsert_incident(connection: Any, event: dict[str, Any], related_events=None) -> dict[str, Any]:
     session = correlation_key(event)
     incident_id = session.incident_id
     timestamp = parse_time(event["timestamp"])
@@ -86,16 +87,14 @@ async def upsert_incident(connection: Any, event: dict[str, Any]) -> dict[str, A
         attack_type(event),
         json.dumps({"correlation_key": session.value, "session": session.parts}),
     )
-    await connection.execute(
+    await connection.executemany(
         """
         INSERT INTO ahr.incident_events(incident_id, event_id, relationship, confidence)
         VALUES ($1,$2,'correlated',$3)
         ON CONFLICT (incident_id, event_id) DO UPDATE SET
             confidence = greatest(coalesce(ahr.incident_events.confidence, 0.0), excluded.confidence)
         """,
-        incident_id,
-        event["event_id"],
-        max(0.5, initial_risk),
+        [(incident_id,item['event_id'],max(.5,risk_score(item))) for item in (related_events or [event])],
     )
     events = await fetch_incident_events(connection, incident_id)
     severities = [int(item.get("severity") or 0) for item in events]
@@ -106,8 +105,9 @@ async def upsert_incident(connection: Any, event: dict[str, Any]) -> dict[str, A
     risk = max(risks) if risks else initial_risk
     source_ips = sorted({str(item.get("src_ip")) for item in events if item.get("src_ip")})
     targets = sorted({str(item.get("dst_ip") or (item.get("container") or {}).get("name")) for item in events if item.get("dst_ip") or item.get("container")})
-    chain = build_attack_chain(events)
-    timeline = build_timeline(events)
+    chain = build_web_graph(events)
+    # Full evidence stays in incident_events; bound the materialized view as incidents grow.
+    timeline = build_timeline(events[-200:])
     representative = max(events, key=risk_score)
     await connection.execute(
         """

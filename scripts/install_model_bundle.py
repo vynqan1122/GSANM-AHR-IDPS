@@ -58,6 +58,6 @@ def install(archive, destination):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--zip', default=str(ROOT/'dist/ahr-models-v2.zip'))
-    parser.add_argument('--output', default=str(ROOT/'experiments/bundles/colab-v2'))
+    parser.add_argument('--output', default=str(ROOT/'experiments/bundles/dvwa-100k-20261022'))
     args = parser.parse_args()
     print(json.dumps(install(args.zip, args.output), indent=2))

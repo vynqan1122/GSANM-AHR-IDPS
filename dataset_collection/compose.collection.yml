@@ -1,0 +1,35 @@
+services:
+  dataset-generator:
+    extends:
+      file: app/compose.fragment.yml
+      service: backend
+    profiles: [collection]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: [python, -m, dataset_collection.large_campaign, --help]
+    volumes: !override
+      - ./datasets:/opt/ahr-idps/datasets
+    healthcheck:
+      disable: true
+    mem_limit: 2g
+    cpus: 2.0
+  dataset-native-export:
+    extends:
+      file: pipeline/compose.fragment.yml
+      service: collector
+    profiles: [collection]
+    build:
+      context: .
+      dockerfile: pipeline/Dockerfile
+    command: [python, -m, dataset_collection.native_export, --help]
+    user: '65532:65532'
+    volumes: !override
+      - ./datasets:/opt/ahr-idps/datasets
+      - nginx_logs:/var/log/ahr-nginx:ro
+      - suricata_logs:/var/log/suricata:ro
+      - falco_events:/var/log/falco:ro
+      - wazuh_logs:/var/log/wazuh:ro
+    healthcheck:
+      disable: true
+    mem_limit: 2g

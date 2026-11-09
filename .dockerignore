@@ -4,6 +4,7 @@ dist/
 output/
 tmp/
 .venv-http/
+.venv-genti/
 .env
 .env.*
 !.env.example
@@ -19,8 +20,10 @@ datasets/processed/
 datasets/labels/
 datasets/graphs/
 datasets/metadata/
+datasets/campaigns/
 experiments/results/
 experiments/bundles/
+experiments/genti/
 secrets/
 dashboard/node_modules/
 evidence/

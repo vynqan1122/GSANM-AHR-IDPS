@@ -262,7 +262,7 @@ services:
       INCIDENT_STREAM: security.incidents
       INCIDENT_GROUP: incident-engine
       INCIDENT_CONSUMER: incident-engine-1
-      INCIDENT_START_AT_END: "true"
+      INCIDENT_START_AT_END: "false"
       INCIDENT_HEARTBEAT: /tmp/incident-heartbeat.json
     tmpfs:
       - /tmp:uid=65532,gid=65532,mode=0700,size=67108864

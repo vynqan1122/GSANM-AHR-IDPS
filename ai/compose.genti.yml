@@ -1,0 +1,109 @@
+services:
+  backend:
+    environment:
+      GENTI_ENABLED: "true"
+      GENTI_URL: http://genti:8090
+      INCIDENT_SENSOR_ONLY: "true"
+      AHR_AUTOMATION_KEY: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+  incident-engine:
+    environment:
+      INCIDENT_INPUT_STREAM: security.events.normalized
+      INCIDENT_GROUP: incident-sensors
+      INCIDENT_SENSOR_ONLY: "true"
+      INCIDENT_START_AT_END: "false"
+  genti:
+    build:
+      context: .
+      dockerfile: ai/genti/Dockerfile
+    image: ahr-idps/genti:local
+    init: true
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [data]
+    expose: ["8090"]
+    environment:
+      GENTI_MODEL_DIR: /model
+      GENTI_CPU_THREADS: "4"
+    volumes:
+      - type: bind
+        source: ${GENTI_MODEL_PATH:-./experiments/genti/main}
+        target: /model
+        read_only: true
+        bind:
+          create_host_path: false
+      - ./output/genti-self-test:/checks:ro
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700,size=67108864
+    mem_limit: ${GENTI_MEMORY:-8g}
+    cpus: 4.0
+    pids_limit: 128
+    healthcheck:
+      test: [CMD, python, -c, "import json,urllib.request; assert json.load(urllib.request.urlopen('http://127.0.0.1:8090/status',timeout=3))['ready']"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 180s
+  genti-check:
+    image: jasonish/suricata@sha256:581dca6c8cc8a8a2fafd3fff33368573b547b7600a22b21a18866da05727508f
+    entrypoint: [python3, /project/ai/genti/self_test.py]
+    init: true
+    restart: unless-stopped
+    read_only: true
+    user: "0:0"
+    cap_drop: [ALL]
+    cap_add: [DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    networks: [data]
+    environment:
+      PYTHONPATH: /project
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./ai/genti:/project/ai/genti:ro
+      - ./output/genti-self-test:/checks
+    tmpfs:
+      - /tmp:rw,size=536870912
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 128
+    depends_on:
+      genti:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python3, -c, "import json,urllib.request; s=json.load(urllib.request.urlopen('http://genti:8090/status',timeout=3)); assert s['self_test']['status']=='passed'"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 2100s
+  genti-automation:
+    image: jasonish/suricata@sha256:581dca6c8cc8a8a2fafd3fff33368573b547b7600a22b21a18866da05727508f
+    entrypoint: [python3, /project/ai/genti/automation_worker.py]
+    init: true
+    restart: unless-stopped
+    read_only: true
+    user: "0:0"
+    cap_drop: [ALL]
+    cap_add: [DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    networks: [data]
+    environment:
+      PYTHONPATH: /project
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      AHR_AUTOMATION_KEY: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    volumes:
+      - ./ai/genti:/project/ai/genti:ro
+      - ./output/genti-self-test:/checks
+    tmpfs:
+      - /tmp:rw,size=536870912
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 128
+    healthcheck:
+      test: [CMD, python3, -c, "import json,urllib.request; s=json.load(urllib.request.urlopen('http://backend:8000/api/automation/status',timeout=5)); assert s['worker_fresh']"]
+      interval: 15s
+      timeout: 8s
+      retries: 4
+      start_period: 2100s

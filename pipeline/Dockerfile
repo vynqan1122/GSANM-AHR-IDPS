@@ -14,6 +14,8 @@ RUN python -m pip install --requirement /tmp/requirements.txt \
 
 COPY collector ./collector
 COPY normalizer ./normalizer
+COPY dataset_collection ./dataset_collection
+COPY feature_engine ./feature_engine
 COPY ahr_common ./ahr_common
 COPY pipeline/config.yml ./pipeline/config.yml
 

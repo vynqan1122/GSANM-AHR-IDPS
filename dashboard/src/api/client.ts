@@ -13,7 +13,8 @@ export async function postJson<T>(path: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+    const error = await response.json().catch(() => null);
+    throw new Error(typeof error?.detail === 'string' ? error.detail : `${response.status} ${response.statusText}`);
   }
   return response.json() as Promise<T>;
 }

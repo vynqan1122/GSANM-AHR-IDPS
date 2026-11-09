@@ -65,4 +65,4 @@ bash "$SCRIPT_DIR/init_dvwa.sh"
 lab_port="$(ahr_env_value LAB_HTTP_PORT)"
 ahr_compose ps
 ahr_info "Phase 1 lab is healthy: http://127.0.0.1:${lab_port}"
-ahr_info "Run './scripts/verify_phase1.sh' for the full acceptance check."
+ahr_info "Lab services are healthy."

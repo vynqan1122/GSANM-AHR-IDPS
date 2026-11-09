@@ -13,7 +13,7 @@ from typing import Any
 import json
 
 
-GENTI_VERSION = "genti-lite-v1"
+GENTI_VERSION = "genti-lite"
 
 ATTACK_CONTEXT = {
     "sql_injection": {"cwe": ["CWE-89"], "attack": ["T1190"], "tactic": ["TA0001"]},

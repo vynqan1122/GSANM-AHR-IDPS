@@ -72,14 +72,14 @@ def log_scores(model,z):
 
 
 def graph_prob(model,g):
-    return np.array([model.predict_proba(item)[0] for item in g],dtype=np.float32)
+    vectors=np.array([model.embed_graph(item) for item in g])
+    return model.graph_model.predict_proba(vectors)[:,1].astype(np.float32)
 
 
 def fit_base(events,y,device,rounds,validation=None,histories=None,prefix='final'):
     x=np.array([build_network_features(learning_event(e)) for e in events],np.float32)
     embed=MiniLMEmbedder()
     z=embed.encode([normalized_log_text(e) for e in events])
-    graphs=[graph_for(e) for e in events]
     validation_xy=None if validation is None else (
         np.array([build_network_features(learning_event(e)) for e in validation[0]],np.float32),validation[1])
     history={}
@@ -91,7 +91,14 @@ def fit_base(events,y,device,rounds,validation=None,histories=None,prefix='final
     forest.fit(z[y==0])
     log={'classifier':clf,'iforest':forest,'version':'log-v1','anomaly_weight':.5,
          'representation':'hashing384-redacted-v2'}
-    graph=GraphSAGEWindowClassifier();graph.fit(graphs,y)
+    graph=GraphSAGEWindowClassifier()
+    first=graph_for(events[0])
+    gx=np.empty((len(events),len(graph.embed_graph(first))),dtype=np.float32)
+    bx=np.empty((len(events),len(graph.baseline_features(first))),dtype=np.float32)
+    for i,event in enumerate(events):
+        current=graph_for(event)
+        gx[i]=graph.embed_graph(current);bx[i]=graph.baseline_features(current)
+    graph.fit_vectors(gx,bx,y)
     if histories is not None:
         histories[prefix+'/network']=history
         histories[prefix+'/log_mlp']={'train':{'loss':list(clf[-1].loss_curve_)}}
@@ -103,7 +110,8 @@ def fit_base(events,y,device,rounds,validation=None,histories=None,prefix='final
 def predict_base(model,events):
     x=np.array([build_network_features(learning_event(e)) for e in events],np.float32)
     z=MiniLMEmbedder().encode([normalized_log_text(e) for e in events])
-    return np.column_stack((xpred(model['network'],x),log_scores(model['log'],z),graph_prob(model['graph'],[graph_for(e) for e in events])))
+    return np.column_stack((xpred(model['network'],x),log_scores(model['log'],z),
+                            graph_prob(model['graph'],(graph_for(e) for e in events))))
 
 
 def fusion_matrix(events,scores):

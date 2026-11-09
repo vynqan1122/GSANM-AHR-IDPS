@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # AHR-IDPS Unified Lifecycle Management Controller
-# Controls all 18 containers across Phases 1 through 14
+# Controls the 15-service local AI bundle v2 stack
 # Supports: start | stop | restart | status | health | logs [service]
 # ==============================================================================
 set -Eeuo pipefail
@@ -44,10 +44,10 @@ ${BOLD}AHR-IDPS Master Control Tool${NC}
 Usage: $0 [COMMAND] [OPTIONS]
 
 ${BOLD}Commands:${NC}
-  start               Khởi động toàn bộ 18 dịch vụ theo đúng thứ tự phụ thuộc (Phase 1 -> 13)
-  stop                Tắt toàn bộ 18 dịch vụ theo thứ tự ngược lại (bảo tồn toàn vẹn dữ liệu)
+  start               Khởi động hệ thống theo AHR_AI_MODE và thứ tự phụ thuộc
+  stop                Tắt toàn bộ dịch vụ theo thứ tự ngược lại (giữ dữ liệu)
   restart             Khởi động lại toàn bộ hệ thống (stop graceful -> start)
-  status              Hiển thị trạng thái chi tiết của 18 container và URL truy cập
+  status              Hiển thị trạng thái container và URL truy cập
   health              Kiểm tra tính sẵn sàng thực tế (Postgres, Redis, API, Sensors, AI)
   logs [service]      Xem log thời gian thực (nếu không truyền service sẽ xem toàn bộ)
 
@@ -61,6 +61,10 @@ EOF
 }
 
 cmd_start() {
+    if [[ "$(ahr_env_value AHR_AI_MODE 2>/dev/null || true)" == genti ]]; then
+        bash "$SCRIPT_DIR/genti_control.sh" start
+        return
+    fi
     printf "${CYAN}${BOLD}====================================================================${NC}\n"
     printf "${CYAN}${BOLD}       AHR-IDPS: BẮT ĐẦU KHỞI ĐỘNG HỆ THỐNG THEO ĐÚNG THỨ TỰ       ${NC}\n"
     printf "${CYAN}${BOLD}====================================================================${NC}\n"
@@ -68,55 +72,55 @@ cmd_start() {
     ahr_check_docker_engine_reachable
     ahr_prepare_env
     bash "$SCRIPT_DIR/wazuh_prepare.sh"
-    ahr_require_legacy_ai_mode
+    bundle_dir="${AHR_MODEL_BUNDLE_DIR:-$(ahr_env_value AHR_MODEL_BUNDLE_DIR || true)}"
+    bundle_dir="${bundle_dir:-./experiments/bundles/dvwa-100k-20261022}"
+    [[ "$bundle_dir" = /* ]] || bundle_dir="$AHR_PROJECT_ROOT/$bundle_dir"
+    [[ -s "$bundle_dir/manifest.json" ]] || ahr_die "Missing bundle manifest: $bundle_dir/manifest.json; run scripts/install_model_bundle.py first"
+    ahr_bundle_compose config --quiet
 
     # -------------------------------------------------------------
     # BƯỚC 1: PHASE 1 - CƠ SỞ HẠ TẦNG & CSDL (mariadb, postgres, redis, dvwa, nginx)
     # -------------------------------------------------------------
     log_step "Bước 1/5: Khởi động Hạ tầng Core & Cơ sở dữ liệu (Phase 1)..."
-    ahr_compose up --detach --wait --wait-timeout 300
-    bash "$SCRIPT_DIR/init_dvwa.sh"
+    bash "$SCRIPT_DIR/start_lab.sh"
     log_ok "Phase 1 Hạ tầng & CSDL đã sẵn sàng."
 
     # -------------------------------------------------------------
     # BƯỚC 2: PHASE 2 - HỆ THỐNG CẢM BIẾN (suricata, falco, wazuh-manager)
     # -------------------------------------------------------------
     log_step "Bước 2/5: Khởi động Cảm biến an ninh (Phase 2)..."
-    ahr_require_sensor_files
-    ahr_sensors_compose up --detach --wait --wait-timeout 180 --no-deps suricata falco
-    ahr_sensors_compose up --detach --wait --wait-timeout 300 --no-deps wazuh-manager
+    bash "$SCRIPT_DIR/start_sensors.sh"
+    bash "$SCRIPT_DIR/start_wazuh_api.sh"
     log_ok "Phase 2 Sensors (Suricata, Falco, Wazuh) đã sẵn sàng."
 
     # -------------------------------------------------------------
     # BƯỚC 3: PHASE 3 - STREAMING PIPELINE (collector, normalizer)
     # -------------------------------------------------------------
     log_step "Bước 3/5: Khởi động Streaming Pipeline (Phase 3)..."
-    ahr_require_pipeline_files
-    ahr_pipeline_compose up --detach --wait --wait-timeout 240 --no-deps collector normalizer
+    bash "$SCRIPT_DIR/start_pipeline.sh"
     log_ok "Phase 3 Pipeline (Collector, Normalizer) đã sẵn sàng."
 
     # -------------------------------------------------------------
     # BƯỚC 4: PHASE 4 - SOC BACKEND & WEB ROUTING (backend, nginx, suricata)
     # -------------------------------------------------------------
     log_step "Bước 4/5: Khởi động Backend API & Dashboard Routing (Phase 4)..."
-    ahr_require_app_files
-    ahr_app_compose up --detach --wait --wait-timeout 240 --no-deps backend
-    ahr_app_compose up --detach --wait --wait-timeout 180 --no-deps nginx
-    ahr_app_compose up --detach --wait --wait-timeout 180 --no-deps suricata
+    bash "$SCRIPT_DIR/start_app.sh"
     log_ok "Phase 4 Backend & SOC Dashboard đã sẵn sàng."
 
     # -------------------------------------------------------------
     # BƯỚC 5: PHASE 6-13 - AI ENGINES & ACTIVE RESPONSE
     # -------------------------------------------------------------
-    log_step "Bước 5/5: Đăng ký Models và Khởi động AI Correlation & Response Engines..."
+    log_step "Bước 5/5: Khởi động AI chính, Correlation & Response Engines..."
     ahr_require_ai_files
-    bash "$SCRIPT_DIR/register_existing_models.sh"
-    ahr_ai_compose up --detach --wait --wait-timeout 300 --no-deps \
-        ai-network ai-log graph-builder fusion-engine incident-engine rule-generator response-engine
+    ahr_bundle_compose build ai-bundle incident-engine
+    ahr_ai_compose stop ai-network ai-log graph-builder fusion-engine
+    ahr_stop_alternative_ai
+    ahr_bundle_compose up --detach --wait --wait-timeout 300 --no-build --no-deps \
+        ai-bundle incident-engine rule-generator response-engine
     log_ok "Phase 6-13 AI Engines & Active Response đã sẵn sàng."
 
     printf "\n${GREEN}${BOLD}====================================================================${NC}\n"
-    printf "${GREEN}${BOLD}       TẤT CẢ 18 CONTAINERS ĐÃ ĐƯỢC KHỞI ĐỘNG VÀ HEALTHY HOÀN TOÀN!   ${NC}\n"
+    printf "${GREEN}${BOLD}       STACK 15 DỊCH VỤ CHÍNH ĐÃ QUA HEALTH GATE!                    ${NC}\n"
     printf "${GREEN}${BOLD}====================================================================${NC}\n\n"
     cmd_status
 }
@@ -166,12 +170,16 @@ cmd_restart() {
 }
 
 cmd_status() {
+    if [[ "$(ahr_env_value AHR_AI_MODE 2>/dev/null || true)" == genti ]]; then
+        bash "$SCRIPT_DIR/genti_control.sh" status
+        return
+    fi
     ahr_check_docker_engine_reachable
     [[ -f "$AHR_ENV_FILE" ]] || ahr_prepare_env
     bash "$SCRIPT_DIR/wazuh_prepare.sh"
 
-    printf "${CYAN}${BOLD}[TRẠNG THÁI 18 CONTAINERS AHR-IDPS]${NC}\n"
-    ahr_ai_compose ps --all
+    printf "${CYAN}${BOLD}[TRẠNG THÁI AHR-IDPS BUNDLE V2]${NC}\n"
+    ahr_bundle_compose ps --all
 
     lab_port="$(ahr_env_value LAB_HTTP_PORT 2>/dev/null || echo "8080")"
     printf "\n${BOLD}Địa chỉ truy cập dịch vụ:${NC}\n"
@@ -182,6 +190,10 @@ cmd_status() {
 }
 
 cmd_health() {
+    if [[ "$(ahr_env_value AHR_AI_MODE 2>/dev/null || true)" == genti ]]; then
+        bash "$SCRIPT_DIR/genti_control.sh" health
+        return
+    fi
     ahr_check_docker_engine_reachable
     [[ -f "$AHR_ENV_FILE" ]] || ahr_prepare_env
 
@@ -257,9 +269,9 @@ cmd_logs() {
     bash "$SCRIPT_DIR/wazuh_prepare.sh"
 
     if [[ -n "$service" ]]; then
-        ahr_ai_compose logs -f --tail 100 "$service"
+        ahr_bundle_compose logs -f --tail 100 "$service"
     else
-        ahr_ai_compose logs -f --tail 50
+        ahr_bundle_compose logs -f --tail 50
     fi
 }
 

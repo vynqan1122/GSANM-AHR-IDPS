@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.api import alerts, containers, dashboard, events, experiments, health, incidents, models, network, responses, rules, sensors, system
+from backend.api import alerts, automation, containers, dashboard, events, experiments, genti, health, incidents, models, network, responses, rules, sensors, system
 from backend.config import Settings
 from backend.db.session import create_engine, create_session_factory
 from backend.main_state import AppState, set_state
@@ -45,6 +45,8 @@ for router in (
     rules.router,
     network.router,
     models.router,
+    genti.router,
+    automation.router,
     experiments.router,
     alerts.router,
     sensors.router,

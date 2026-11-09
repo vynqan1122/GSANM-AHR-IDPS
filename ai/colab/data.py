@@ -7,7 +7,7 @@ from urllib.parse import urlsplit,parse_qsl,urlencode
 
 import numpy as np
 from sklearn.model_selection import GroupShuffleSplit
-from feature_engine.event_contract import decode_event,learning_event,http_details,operational_path
+from feature_engine.event_contract import decode_event,learning_event,http_details,operational_path,sanitized_event
 
 
 def load_events(path,max_events=500000,exclude_conflicts=False):
@@ -59,25 +59,3 @@ def graph_for(event):
     # Shared live/Colab contract: context is the current event, no future samples.
     from ai.graph.graph_builder import build_graphs
     return build_graphs([learning_event(event)],30)[0]
-
-
-def sanitized_event(event):
-    """Allowlist for private Colab export/API; credentials/raw bodies never uploaded."""
-    e=learning_event(event)
-    out={k:e.get(k) for k in ('event_id','timestamp','source','event_type','category','protocol',
-                              'src_ip','dst_ip','src_port','dst_port','severity','http','network','rule')}
-    h=out.get('http') or {}
-    h={k:h.get(k) for k in ('method','uri','status','request_length','response_length')}
-    h['uri']=__import__('feature_engine.event_contract',fromlist=['clean_uri']).clean_uri(h.get('uri',''))
-    out['http']=h
-    # Graph context retains only role/name, never container IDs, command line, file contents.
-    for key in ('container','process'):
-        obj=e.get(key) or {}
-        out[key]={k:obj[k] for k in ('name','parent_name','image') if obj.get(k)} or None
-    rule=out.get('rule')
-    if isinstance(rule,dict):
-        out['rule']={k:rule[k] for k in ('rule_id','name','category','confidence','engine') if k in rule}
-    out['raw_event']={}
-    for key in ('scenario_id','campaign_id','label','attack_type'):
-        if key in event:out[key]=event[key]
-    return out

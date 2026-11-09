@@ -1,8 +1,8 @@
-<#
+﻿<#
 .SYNOPSIS
     AHR-IDPS Windows PowerShell Unified Lifecycle Management Controller
 .DESCRIPTION
-    Script điều khiển toàn bộ 18 dịch vụ của AHR-IDPS thông qua WSL 2 / Docker
+    Script điều khiển 15 dịch vụ AHR-IDPS bundle v2 thông qua WSL 2 / Docker
     Hỗ trợ bật / tắt / restart / kiểm tra trạng thái / kiểm tra sức khỏe hệ thống.
 .EXAMPLE
     .\ahr_control.ps1 start
@@ -20,6 +20,7 @@ param (
     [string]$Command = 'status',
 
     [Parameter(Position = 1)]
+    [ValidatePattern('^[a-zA-Z0-9_-]*$')]
     [string]$Service = ''
 )
 
@@ -37,10 +38,10 @@ function Show-Help {
     Write-Host "             AHR-IDPS POWERSHELL MANAGEMENT TOOL                     " -ForegroundColor Cyan
     Write-Host "====================================================================" -ForegroundColor Cyan
     Write-Host "Cú pháp:" -ForegroundColor Yellow
-    Write-Host "  .\ahr_control.ps1 start          - Bật toàn bộ 18 dịch vụ theo thứ tự đúng" -ForegroundColor White
-    Write-Host "  .\ahr_control.ps1 stop           - Tắt toàn bộ 18 dịch vụ bảo toàn dữ liệu" -ForegroundColor White
+    Write-Host "  .\ahr_control.ps1 start          - Bật 15 dịch vụ với AI bundle v2" -ForegroundColor White
+    Write-Host "  .\ahr_control.ps1 stop           - Tắt toàn bộ dịch vụ, giữ dữ liệu" -ForegroundColor White
     Write-Host "  .\ahr_control.ps1 restart        - Khởi động lại toàn bộ hệ thống" -ForegroundColor White
-    Write-Host "  .\ahr_control.ps1 status         - Kiểm tra trạng thái 18 container" -ForegroundColor White
+    Write-Host "  .\ahr_control.ps1 status         - Kiểm tra trạng thái container" -ForegroundColor White
     Write-Host "  .\ahr_control.ps1 health         - Kiểm tra sâu kết nối DB, API, Sensors, AI" -ForegroundColor White
     Write-Host "  .\ahr_control.ps1 logs [service] - Xem log (ví dụ: .\ahr_control.ps1 logs backend)" -ForegroundColor White
     Write-Host ""
@@ -68,3 +69,4 @@ $WslCmd = "cd '$WslPath' && ./scripts/ahr_control.sh $Command $Service"
 
 # Thực thi lệnh thông qua WSL với user root để đảm bảo quyền truy cập Docker daemon
 & wsl.exe @wslDistroArg -u root -- bash -c "$WslCmd"
+exit $LASTEXITCODE

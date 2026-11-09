@@ -1,0 +1,41 @@
+services:
+  genti:
+    image: ahr-idps/genti-adapter:local
+    build:
+      dockerfile: ai/genti/Dockerfile.adapter
+    environment:
+      GENTI_LLAMA_URL: http://genti-llama:8080
+    mem_limit: 1g
+    cpus: 1.0
+    depends_on:
+      genti-llama:
+        condition: service_healthy
+  genti-llama:
+    image: ${GENTI_LLAMA_IMAGE:?Select the pinned image from the verified GGUF manifest}
+    command: [--server, -m, /model/model.gguf, --alias, genti, --host, 0.0.0.0, --port, "8080", -c, "2048", -np, "1", -t, "4", -tb, "4", -ngl, "0", --n-predict, "512", --no-context-shift, --cache-ram, "0", --jinja, --chat-template-file, /model/chat_template.jinja]
+    init: true
+    restart: "no"
+    read_only: true
+    user: "65532:65532"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [data]
+    expose: ["8080"]
+    volumes:
+      - type: bind
+        source: ${GENTI_MODEL_PATH:-./experiments/genti/main}
+        target: /model
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:uid=65532,gid=65532,mode=0700,size=67108864
+    mem_limit: 8g
+    cpus: 4.0
+    pids_limit: 128
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 300s

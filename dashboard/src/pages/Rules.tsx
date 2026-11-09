@@ -1,320 +1,253 @@
-import { useEffect, useState } from 'react';
-import {
-  FileCode2,
-  CheckCircle,
-  XCircle,
-  Clock,
-  Sparkles,
-  ShieldCheck,
-  Search,
-  AlertOctagon,
-  Eye,
-} from 'lucide-react';
-import { getJson } from '../api/client';
-import { Badge, statusVariant } from '../components/Badge';
-import { Modal } from '../components/Modal';
-import type { Paged, RuleRow } from '../types/api';
+import { useState } from 'react';
+import { ArrowRight, Search, ShieldCheck, Sparkles } from 'lucide-react';
+import { useApi } from '@/api/query';
+import { fmtDateTime, fmtNumber, fmtScore } from '@/lib/format';
+import { Card } from '@/components/ui/card';
+import { Input, Segmented } from '@/components/ui/input';
+import { Sheet } from '@/components/ui/overlays';
+import { DataTable, type Column } from '@/components/soc/DataTable';
+import { EmptyState, Field, JsonView, Mono, Page, PageHeader, SectionLabel, StaleNotice, StatusBadge, Truncate } from '@/components/soc/primitives';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { postJson } from '@/api/client';
+import { queryClient } from '@/api/query';
+import { toast } from 'sonner';
+import type { Paged, RuleRow } from '@/types/api';
+
+const TABS = ['all', 'candidate', 'validating', 'shadow', 'active', 'rejected', 'disabled'] as const;
+
+function downloadNativeCandidate(rule: RuleRow) {
+  const row = { id: rule.rule_id, model_versions: rule.model_versions,
+    generated: JSON.stringify({ rule: rule.content, summary: rule.description ?? rule.name, mitre_attack: [] }) };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(row) + '\n'], { type: 'application/x-ndjson;charset=utf-8' }));
+  const link = document.createElement('a'); link.href = url; link.download = `${rule.rule_id}.jsonl`; link.click();
+  URL.revokeObjectURL(url);
+}
+const tabText: Record<string, string> = { all: 'Tất cả', candidate: 'Candidate', validating: 'Đang kiểm tra', shadow: 'Shadow', active: 'Active', rejected: 'Rejected', disabled: 'Disabled' };
+
+const originText = (rule: RuleRow) =>
+  rule.generator === 'genti-llm' ? 'GenTI · model của bạn' : rule.origin === 'ai_generated' || rule.origin === 'ai_pattern_mining' ? 'AI sinh' : rule.source === 'generated' ? 'Sinh tự động' : rule.source || 'Signature gốc';
+
+const actionText: Record<string, string> = { 'auto-generated': 'AI đã sinh Candidate', 'auto-held': 'Giữ Candidate',
+  'auto-native-failed': 'Kiểm định native chưa đạt', 'auto-shadow': 'Tự chuyển Shadow', 'auto-active': 'Tự chuyển Active',
+  'auto-expired': 'Hết thời hạn chặn', 'ips-block': 'IPS đã chặn HTTP', reject: 'Đã từ chối', disable: 'Đã vô hiệu hóa' };
 
 export function Rules() {
-  const [rules, setRules] = useState<RuleRow[]>([]);
-  const [selectedRule, setSelectedRule] = useState<RuleRow | null>(null);
-  const [selectedTab, setSelectedTab] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [tab, setTab] = useState<string>('all');
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<RuleRow | null>(null);
+  const [page, setPage] = useState(1);
+  const path = `/api/rules?page_size=50&page=${page}${tab === 'all' ? '' : `&status=${tab}`}&search=${encodeURIComponent(search)}`;
+  const query = useApi<Paged<RuleRow>>(path, 15_000);
+  const rules = query.data?.items ?? [];
+  const detail = useApi<RuleRow>(selected ? `/api/rules/${encodeURIComponent(selected.rule_id)}` : null, 5000);
+  const automation = useApi<{ policy: { enabled: boolean }; worker_fresh: boolean }>('/api/automation/status', 5000);
 
-  const loadRules = () => {
-    setIsLoading(true);
-    getJson<Paged<RuleRow>>('/api/rules?page_size=100')
-      .then((data) => setRules(data.items || []))
-      .catch(() => setRules([]))
-      .finally(() => setIsLoading(false));
-  };
-
-  useEffect(() => {
-    loadRules();
-    const timer = window.setInterval(loadRules, 15000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const filteredRules = rules.filter((r) => {
-    if (selectedTab !== 'all' && r.status?.toLowerCase() !== selectedTab.toLowerCase()) {
-      return false;
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const match =
-        (r.rule_id && r.rule_id.toLowerCase().includes(q)) ||
-        (r.name && r.name.toLowerCase().includes(q)) ||
-        (r.engine && r.engine.toLowerCase().includes(q)) ||
-        (r.origin && r.origin.toLowerCase().includes(q));
-      if (!match) return false;
-    }
-    return true;
-  });
-
-  const handleAction = (actionName: string) => {
-    setActionMessage(`Đã gửi yêu cầu: ${actionName} cho quy tắc ${selectedRule?.rule_id}. Cần xác nhận thủ công theo hợp đồng an toàn.`);
-    setTimeout(() => setActionMessage(null), 4000);
-  };
-
-  const formatScore = (val?: number | null) => (typeof val === 'number' ? val.toFixed(2) : '—');
+  const columns: Column<RuleRow>[] = [
+    { key: 'name', header: 'Quy tắc', width: 'minmax(200px, 1.4fr)', cell: (r) => (
+      <div className="min-w-0 leading-tight">
+        <Truncate text={r.name} className="font-medium" />
+        <div className="truncate font-mono text-[11px] text-subtle">{r.rule_id}</div>
+        <div className="mt-1 text-[11px] text-muted-foreground">{originText(r)}</div>
+      </div>
+    ) },
+    { key: 'engine', header: 'Engine', width: '72px', cell: (r) => <span className="capitalize">{r.engine}</span> },
+    { key: 'status', header: 'Trạng thái', width: '90px', cell: (r) => <StatusBadge status={r.status} /> },
+    { key: 'next', header: 'Tiến trình / lý do chờ', width: 'minmax(200px, 1.3fr)', cell: (r) => <div className="space-y-1 whitespace-normal text-xs">
+      <p className="font-medium">{r.automation?.label ?? 'Quy tắc IDS · quản lý riêng'}</p>
+      <p className="line-clamp-2 text-muted-foreground">{r.automation?.stage === 'shadow' || r.automation?.stage === 'ready'
+        ? `Thời gian ${r.automation.shadow.elapsed_seconds}/60s · Khớp ${r.automation.shadow.matches}/3 · Không khớp ${r.automation.shadow.nonmatches}/10 · Tổng ${r.automation.shadow.unique}/20 URI`
+        : r.automation?.reason ?? 'Mở chi tiết để xem kiểm định và thao tác registry.'}</p>
+    </div> },
+    { key: 'native', header: 'Kiểm định', width: '100px', cell: (r) => <span className="text-xs">{r.automation ? (r.automation.native_passed ? 'Native đạt' : r.automation.stage === 'native_failed' ? 'Native chưa đạt' : 'Chưa có native đạt') : r.validation_status ?? 'Chưa kiểm tra'}</span> },
+    { key: 'enforcement', header: 'Thực thi IPS', width: '120px', cell: (r) => <Badge tone={r.automation?.enforcing ? 'success' : 'neutral'}>{r.automation?.enforcing ? 'Đang chặn HTTP' : 'Không chặn'}</Badge> },
+  ];
 
   return (
-    <div className="soc-page-container">
-      {/* Policy Reminder Banner */}
-      <div className="soc-status-banner banner-healthy">
-        <div className="banner-left">
-          <ShieldCheck size={24} className="text-emerald-400" />
-          <div>
-            <h2 className="banner-title">
-              VÒNG ĐỜI QUY TẮC PHÁT HIỆN (RULE LIFECYCLE MANAGEMENT)
-            </h2>
-            <p className="banner-desc">
-              Cơ chế an toàn 3 cổng: <b>Candidate</b> (AI sinh tự động) → <b>Shadow</b> (Chạy ngầm kiểm thử không chặn) → <b>Active</b> (Phê duyệt kích hoạt chính thức).
-            </p>
+    <Page>
+      <PageHeader
+        title="Quy tắc phát hiện"
+        description="Candidate là rule đề xuất, chưa chặn. GenTI tự kiểm định native → Shadow quan sát → Active chặn HTTP khi đủ điều kiện; kết quả của model được giữ trong từng rule."
+      />
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+        <ShieldCheck className="size-4 text-success" />
+        <span className="flex flex-wrap items-center gap-1.5">
+          <Badge tone="primary">Candidate</Badge>
+          <ArrowRight className="size-3" />
+          <Badge tone="warning">Shadow</Badge>
+          <ArrowRight className="size-3" />
+          <Badge tone="success">Active</Badge>
+          <span className="ml-2">{automation.data ? `Tự động: ${automation.data.policy.enabled ? 'đang bật' : 'đã dừng'} · Worker: ${automation.data.worker_fresh ? 'hoạt động' : 'chưa sẵn sàng'}` : 'Đang đọc trạng thái tự động…'}</span>
+          <a className="ml-2 underline underline-offset-4" href="#/ai">Xem mô hình AI và điều khiển tự động</a>
+        </span>
+      </div>
+      <StaleNotice error={query.error} hasData={Boolean(query.data)} />
+      <StaleNotice error={automation.error} hasData={Boolean(automation.data)} />
+
+      <Card className="overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border p-3">
+          <Segmented
+            label="Lọc theo trạng thái"
+            value={tab}
+            onChange={(value) => { setTab(value); setPage(1); }}
+            options={TABS.map((value) => ({ value, label: tabText[value] }))}
+            className="max-w-full overflow-x-auto [&_button]:shrink-0 [&_button]:whitespace-nowrap"
+          />
+          <div className="relative min-w-56 flex-1 sm:max-w-xs">
+            <Search className="pointer-events-none absolute top-2.5 left-2.5 size-3.5 text-subtle" />
+            <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Tìm toàn bộ rule, engine…" className="pl-8" aria-label="Tìm quy tắc" />
           </div>
         </div>
+        {tab === 'candidate' && <p className="border-b border-border px-4 py-3 text-xs leading-relaxed text-muted-foreground">Không cần duyệt từng rule GenTI. Rule trong phạm vi được worker tự kiểm định; rule ngoài phạm vi hoặc native lỗi được giữ Candidate với lý do bên dưới. Bấm vào một dòng để xem nội dung, bằng chứng kiểm định và điều kiện còn thiếu.</p>}
+        <DataTable
+          label="Quy tắc và tiến trình tự động"
+          columns={columns}
+          rows={rules}
+          rowKey={(r) => r.rule_id}
+          selectedKey={selected?.rule_id}
+          onRowClick={setSelected}
+          loading={query.isPending}
+          minWidth={900}
+          rowHeight={88}
+          maxHeight="calc(100vh - 340px)"
+          empty={<EmptyState title="Không có quy tắc phù hợp" description={tab === 'candidate' ? 'Candidate có thể đã tự chuyển Shadow/Active. Xem các trạng thái đó hoặc trang Mô hình AI để theo dõi lần sinh tiếp theo.' : 'Thử trạng thái khác hoặc thay đổi từ khóa tìm kiếm.'} />}
+        />
+        <div className="flex items-center justify-between gap-3 border-t border-border p-3 text-xs text-muted-foreground">
+          <span>Trang {page} · {query.data?.total ?? 0} quy tắc phù hợp</span>
+          <div className="flex gap-2">
+            <Button size="sm" disabled={page === 1 || query.isFetching} onClick={() => setPage(page - 1)}>Trước</Button>
+            <Button size="sm" disabled={page * 50 >= (query.data?.total ?? 0) || query.isFetching} onClick={() => setPage(page + 1)}>Sau</Button>
+          </div>
+        </div>
+      </Card>
+
+      <Sheet open={selected !== null} onOpenChange={(open) => !open && setSelected(null)} title={selected?.name ?? ''} description={selected?.rule_id} width="max-w-2xl">
+        <StaleNotice error={detail.error} hasData={Boolean(detail.data)} />
+        {selected && <RuleDetail key={selected.rule_id} rule={detail.data ?? selected} />}
+      </Sheet>
+    </Page>
+  );
+}
+
+function RuleDetail({ rule }: { rule: RuleRow }) {
+  const metrics = rule.validation_replay_metrics;
+  const [action, setAction] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const [approved, setApproved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const history = useApi<{ items: Array<{ action_id: number; action: string; reason: string; created_at: string }> }>(`/api/rules/${encodeURIComponent(rule.rule_id)}/history`, 5000);
+  const submit = async () => {
+    setBusy(true); setError('');
+    try {
+      const updated = await postJson<RuleRow>(`/api/rules/${encodeURIComponent(rule.rule_id)}/actions`, {
+        action, reason, approved, expected_status: rule.status, expected_version: rule.current_version,
+      });
+      toast.success(`Đã lưu: ${updated.status.toUpperCase()}`);
+      setAction(null); setReason(''); setApproved(false);
+      await queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith('/api/rules') });
+    } catch (e) { setError(e instanceof Error ? e.message : 'Không lưu được thao tác.'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="flex flex-col gap-5">
+      {rule.automation && <AutomationDetail rule={rule} />}
+      <section className="rounded-lg border border-border p-3">
+        <SectionLabel>Thao tác quy tắc · phiên bản {rule.current_version}</SectionLabel>
+        <div className="flex flex-wrap gap-2">
+          {['candidate', 'rejected', 'disabled'].includes(rule.status) && rule.generator !== 'genti-llm' && <Button size="sm" disabled={busy} onClick={() => setAction('validate')}>Kiểm tra → Shadow</Button>}
+          {rule.status === 'shadow' && rule.generator !== 'genti-llm' && <Button size="sm" disabled={busy || rule.validation_status !== 'passed' || rule.validation_rule_version !== rule.current_version} onClick={() => setAction('activate')}>Phê duyệt Active</Button>}
+          {['candidate', 'shadow'].includes(rule.status) && <Button size="sm" disabled={busy} onClick={() => setAction('reject')}>Từ chối</Button>}
+          {['active', 'shadow'].includes(rule.status) && <Button size="sm" variant="danger" disabled={busy} onClick={() => setAction('disable')}>Vô hiệu hóa quy tắc</Button>}
+          {rule.status === 'validating' && <span className="text-sm text-muted-foreground">Đang kiểm tra quy tắc…</span>}
+        </div>
+        {rule.generator === 'genti-llm' && <div className="mt-3 space-y-3"><p className="text-xs text-muted-foreground">Bật tự động tại Mô hình AI. Rule trong profile lab được Suricata kiểm định rồi Shadow trước khi gateway HTTP thực thi; rule ngoài profile được giữ Candidate. Vô hiệu hóa sẽ ngừng thực thi tại gateway ngay. Không tự nạp rule vào sensor Suricata.</p><Button size="sm" variant="ghost" disabled={!rule.content} onClick={() => downloadNativeCandidate(rule)}>Tải Candidate JSONL để kiểm định native</Button></div>}
+        {action && <div className="mt-3 flex flex-col gap-3">
+          <label className="text-xs text-muted-foreground" htmlFor="rule-action-reason">Lý do thao tác</label>
+          <Input id="rule-action-reason" value={reason} maxLength={500} disabled={busy} onChange={(e) => setReason(e.target.value)} placeholder="Ghi lý do để lưu vào lịch sử…" />
+          {action === 'activate' && <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={approved} onChange={(e) => setApproved(e.target.checked)} disabled={busy} />Tôi đã kiểm tra validation và phê duyệt phiên bản này vào registry Active.</label>}
+          <div className="flex gap-2"><Button size="sm" disabled={busy || reason.trim().length < 3 || (action === 'activate' && !approved)} onClick={submit}>{busy ? 'Đang xử lý…' : 'Xác nhận'}</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => setAction(null)}>Hủy</Button></div>
+          <p className="text-xs text-muted-foreground">Validation chỉ chuyển Shadow khi vượt qua kiểm tra; kết quả không đạt sẽ được ghi rõ là Rejected.</p>
+        </div>}
+        {error && <p role="alert" className="mt-2 text-sm text-sev-critical">{error}</p>}
+      </section>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Trạng thái"><StatusBadge status={rule.status} /></Field>
+        <Field label="Engine"><span className="capitalize">{rule.engine}</span></Field>
+        <Field label="Nguồn gốc"><span className="inline-flex items-center gap-1.5">{originText(rule) === 'AI sinh' && <Sparkles className="size-3.5 text-primary" />}{originText(rule)}</span></Field>
+        <Field label="Chính sách kích hoạt">{rule.generator === 'genti-llm' ? 'Tự động khi đạt các điều kiện' : rule.promotion_requires_approval === false ? 'Tự động' : 'Duyệt registry thủ công'}</Field>
+        <Field label="Support"><span className="num">{fmtNumber(rule.support)}</span></Field>
+        <Field label="Độ tin cậy"><span className="num">{fmtScore(rule.confidence)}</span></Field>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="soc-filter-bar">
-        <div className="filter-group-left">
-          <div className="source-filter-tabs">
-            {['all', 'candidate', 'shadow', 'active', 'rejected'].map((tab) => (
-              <button
-                key={tab}
-                className={`tab-btn ${selectedTab === tab ? 'is-active' : ''}`}
-                onClick={() => setSelectedTab(tab)}
-              >
-                {tab === 'all' ? 'Tất cả Quy tắc' : tab.toUpperCase()}
-              </button>
-            ))}
+      {'description' in rule && typeof (rule as { description?: unknown }).description === 'string' && (
+        <p className="text-[13px] leading-relaxed text-muted-foreground">{(rule as { description?: string }).description}</p>
+      )}
+
+      <section>
+        <SectionLabel>Kết quả replay · xem nguồn mẫu trong lịch sử</SectionLabel>
+        {metrics ? (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Field label="Precision"><span className="num">{fmtScore(metrics.precision)}</span></Field>
+            <Field label="Recall"><span className="num">{fmtScore(metrics.recall)}</span></Field>
+            <Field label="FPR"><span className="num">{fmtScore(metrics.fpr)}</span></Field>
+            <Field label="Số lần khớp"><span className="num">{fmtNumber(metrics.match_count)}</span></Field>
           </div>
-        </div>
-
-        <div className="filter-group-right">
-          <div className="soc-search-input-wrap">
-            <Search size={14} className="search-icon" />
-            <input
-              type="text"
-              placeholder="Tìm Rule ID, Engine (Suricata/Falco), mô tả..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="soc-search-input"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Rules Table */}
-      <div className="soc-panel p-0 overflow-hidden">
-        <div className="panel-header px-4 py-3 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <FileCode2 size={18} className="text-sky-400" />
-            <h3 className="panel-title">Generated rules - Danh mục quy tắc phát hiện</h3>
-            <Badge variant="cyan" size="sm">
-              {filteredRules.length} rules
-            </Badge>
-          </div>
-          <span className="text-xs text-slate-400">
-            Nhấp vào rule để xem mã cú pháp, lý do sinh tự động và kiểm thử Replay
-          </span>
-        </div>
-
-        <div className="table-responsive">
-          <table className="soc-table">
-            <thead>
-              <tr>
-                <th>Mã Rule ID</th>
-                <th>Engine IDS</th>
-                <th>Nguồn gốc</th>
-                <th>Trạng thái (Gate)</th>
-                <th>Độ hỗ trợ (Support)</th>
-                <th>Precision</th>
-                <th>Recall</th>
-                <th>FPR (Báo giả)</th>
-                <th>Số lần khớp</th>
-                <th>Chính sách kích hoạt</th>
-                <th>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRules.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="text-center py-8 text-slate-400">
-                    {isLoading ? 'Đang nạp danh sách rules...' : 'Không tìm thấy rule nào.'}
-                  </td>
-                </tr>
-              ) : (
-                filteredRules.map((rule) => (
-                  <tr
-                    key={rule.rule_id}
-                    onClick={() => setSelectedRule(rule)}
-                    className="clickable-row"
-                  >
-                    <td className="font-mono text-xs font-semibold text-sky-400">
-                      {rule.rule_id}
-                    </td>
-                    <td>
-                      <span className={`sensor-tag sensor-${rule.engine?.toLowerCase()}`}>
-                        {rule.engine?.toUpperCase() || 'SURICATA'}
-                      </span>
-                    </td>
-                    <td className="text-xs text-slate-300">
-                      {rule.origin === 'ai_generated' ? (
-                        <span className="flex items-center gap-1 text-purple-300">
-                          <Sparkles size={12} /> AI Generated
-                        </span>
-                      ) : (
-                        rule.source || 'Base Signature'
-                      )}
-                    </td>
-                    <td>
-                      <Badge variant={statusVariant(rule.status)} size="sm" dot>
-                        {rule.status?.toUpperCase()}
-                      </Badge>
-                    </td>
-                    <td className="font-mono text-xs text-slate-300">{rule.support ?? '—'}</td>
-                    <td className="font-mono text-xs text-emerald-400">
-                      {formatScore(rule.validation_replay_metrics?.precision)}
-                    </td>
-                    <td className="font-mono text-xs text-emerald-400">
-                      {formatScore(rule.validation_replay_metrics?.recall)}
-                    </td>
-                    <td className="font-mono text-xs text-amber-400">
-                      {formatScore(rule.validation_replay_metrics?.fpr)}
-                    </td>
-                    <td className="font-mono text-xs text-slate-300">
-                      {rule.validation_replay_metrics?.match_count ?? '0'}
-                    </td>
-                    <td className="text-xs">
-                      {rule.promotion_requires_approval !== false ? (
-                        <span className="text-amber-400 font-medium">Bắt buộc duyệt tay</span>
-                      ) : (
-                        <span className="text-slate-400">Tự động (Thử nghiệm)</span>
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        className="soc-btn-ghost btn-icon-only"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedRule(rule);
-                        }}
-                        title="Xem chi tiết cú pháp"
-                      >
-                        <Eye size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Rule Inspector Modal */}
-      <Modal
-        isOpen={selectedRule !== null}
-        onClose={() => setSelectedRule(null)}
-        title={`Chi tiết quy tắc: ${selectedRule?.rule_id || ''}`}
-        subtitle={`Engine: ${selectedRule?.engine?.toUpperCase()} · Trạng thái: ${selectedRule?.status?.toUpperCase()}`}
-        width="lg"
-      >
-        {selectedRule && (
-          <div className="rule-inspector-modal">
-            {actionMessage && (
-              <div className="p-3 mb-4 rounded bg-sky-950 border border-sky-500 text-sky-200 text-xs">
-                {actionMessage}
-              </div>
-            )}
-
-            {/* Why was this rule generated */}
-            <div className="drawer-section">
-              <h4 className="section-title flex items-center gap-1.5">
-                <Sparkles size={14} className="text-purple-400" />
-                Lý do sinh quy tắc (AI Anomaly Explanation)
-              </h4>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                {selectedRule.origin === 'ai_generated'
-                  ? 'Quy tắc được AI tự động tổng hợp từ mẫu tấn công bất thường (Unknown Attack) chưa có trong bộ luật cơ bản, dựa trên phân tích feature importance và HTTP/syscall payload clustering.'
-                  : 'Quy tắc chuẩn mực IDS được nạp sẵn để phòng chống các mẫu tấn công đã biết như SQL Injection, Command Injection, XSS trên DVWA.'}
-              </p>
-            </div>
-
-            {/* Validation Replay Metrics */}
-            <div className="drawer-section">
-              <h4 className="section-title">Kết quả kiểm thử phát lại (Historical Replay Metrics)</h4>
-              <div className="detail-meta-grid">
-                <div className="meta-box">
-                  <span className="meta-label">Precision</span>
-                  <span className="meta-val font-mono text-emerald-400">
-                    {formatScore(selectedRule.validation_replay_metrics?.precision)}
-                  </span>
-                </div>
-                <div className="meta-box">
-                  <span className="meta-label">Recall</span>
-                  <span className="meta-val font-mono text-emerald-400">
-                    {formatScore(selectedRule.validation_replay_metrics?.recall)}
-                  </span>
-                </div>
-                <div className="meta-box">
-                  <span className="meta-label">False Positive Rate (FPR)</span>
-                  <span className="meta-val font-mono text-amber-400">
-                    {formatScore(selectedRule.validation_replay_metrics?.fpr)}
-                  </span>
-                </div>
-                <div className="meta-box">
-                  <span className="meta-label">Matches</span>
-                  <span className="meta-val font-mono text-sky-400">
-                    {selectedRule.validation_replay_metrics?.match_count ?? 0}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Generated Rule Syntax / Code Content */}
-            <div className="drawer-section">
-              <h4 className="section-title flex items-center gap-1.5">
-                <FileCode2 size={14} className="text-sky-400" />
-                Nội dung cú pháp quy tắc ({selectedRule.engine})
-              </h4>
-              <pre className="soc-raw-code font-mono text-xs text-sky-300">
-                {selectedRule.content ||
-                  `# Rule ID: ${selectedRule.rule_id}
-alert http any any -> any any (msg:"AHR-IDPS Detected Suspicious Pattern"; content:"dvwa"; sid:1000${selectedRule.rule_id.slice(0, 3)}; rev:1;)`}
-              </pre>
-            </div>
-
-            {/* Actions Toolbar */}
-            <div className="mt-6 pt-4 border-t border-slate-800 flex flex-wrap gap-2 justify-end">
-              <button
-                className="soc-btn-secondary"
-                onClick={() => handleAction('Chuyển sang Shadow Mode')}
-              >
-                <Clock size={14} className="text-amber-400" />
-                Duyệt sang Shadow Mode
-              </button>
-              <button
-                className="soc-btn-primary"
-                onClick={() => handleAction('Kích hoạt Active')}
-              >
-                <CheckCircle size={14} className="text-emerald-400" />
-                Kích hoạt Active
-              </button>
-              <button
-                className="soc-btn-ghost text-rose-400 hover:text-rose-300"
-                onClick={() => handleAction('Từ chối / Vô hiệu hóa')}
-              >
-                <XCircle size={14} />
-                Từ chối / Disable
-              </button>
-            </div>
-          </div>
+        ) : (
+          <p className="rounded-lg border border-border bg-background/40 px-3 py-2 text-xs text-muted-foreground">
+            Quy tắc chưa được validate/replay nên chưa có Precision, Recall và FPR.
+          </p>
         )}
-      </Modal>
+      </section>
+
+      <section>
+        <SectionLabel>Nội dung quy tắc ({rule.engine})</SectionLabel>
+        {rule.content ? (
+          <pre className="max-h-80 overflow-auto rounded-lg border border-border bg-background p-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-foreground">{rule.content}</pre>
+        ) : (
+          <p className="text-xs text-muted-foreground">Backend không trả nội dung cho quy tắc này.</p>
+        )}
+      </section>
+
+      {rule.pattern != null && (
+        <section>
+          <SectionLabel>Pattern đã khai thác</SectionLabel>
+          <JsonView value={rule.pattern} />
+        </section>
+      )}
+      <section>
+        <SectionLabel>Lịch sử thao tác</SectionLabel>
+        <StaleNotice error={history.error} hasData={Boolean(history.data)} />
+        {(history.data?.items ?? []).map((item) => <div key={item.action_id} className="border-b border-border py-2 text-xs"><span className="font-medium">{actionText[item.action] ?? item.action}</span> · {fmtDateTime(item.created_at)}<p className="mt-1 break-words text-muted-foreground">{item.reason}</p></div>)}
+        {history.data?.items.length === 0 && <p className="text-xs text-muted-foreground">Chưa có thao tác từ dashboard.</p>}
+      </section>
+      {(rule as { updated_at?: string }).updated_at && (
+        <p className="text-xs text-subtle">Cập nhật <Mono className="text-muted-foreground">{fmtDateTime((rule as { updated_at?: string }).updated_at)}</Mono></p>
+      )}
     </div>
   );
+}
+
+function AutomationDetail({ rule }: { rule: RuleRow }) {
+  const progress = rule.automation!;
+  const shadow = progress.shadow;
+  const replay = rule.validation_replay_metrics;
+  return <section className="space-y-3" aria-label="Điều kiện triển khai tự động">
+    <h3 className="text-sm font-semibold">{progress.label}</h3>
+    <p className="text-xs leading-relaxed text-muted-foreground">{progress.reason}</p>
+    <dl className="divide-y divide-border text-xs">
+      {[
+        ['Model đang chạy', progress.model_current ? 'Khớp model đã sinh rule' : 'Chưa khớp / chưa sẵn sàng'],
+        ['Phạm vi tự động', progress.profile_supported ? 'GET XSS · gateway DVWA' : 'Chưa hỗ trợ tự động thực thi'],
+        ['Native + gateway parity', progress.native_passed ? `Đạt · TP ${replay?.tp}, TN ${replay?.tn}, FP ${replay?.fp}, FN ${replay?.fn}` : 'Chưa có biên nhận đạt cho đúng nội dung và phiên bản'],
+        ['Shadow · thời gian tối thiểu', `${shadow.elapsed_seconds} / 60 giây`],
+        ['Shadow · URI khớp rule', `${shadow.matches} / 3`],
+        ['Shadow · URI không khớp', `${shadow.nonmatches} / 10`],
+        ['Shadow · tổng URI khác nhau', `${shadow.unique} / 20`],
+        ['Thực thi hiện tại', progress.enforcing ? `Đang chặn HTTP · còn ${Math.ceil(progress.lease_remaining_seconds / 60)} phút` : 'Không chặn bằng rule này'],
+      ].map(([label, value]) => <div key={label} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-3 py-2"><dt className="text-muted-foreground">{label}</dt><dd className="break-words">{value}</dd></div>)}
+    </dl>
+    <p className="text-xs text-muted-foreground">Số lượt Shadow là quan sát HTTP, không phải nhãn TP/TN. Lặp lại cùng method + URI chỉ tính một lần. Các điều kiện phải cùng đạt; không cần checkbox phê duyệt.</p>
+    {progress.native_failure && <details className="text-xs"><summary className="cursor-pointer font-medium">Xem lỗi kiểm định native · {fmtDateTime(progress.native_failure.created_at)}</summary><JsonView value={progress.native_failure.details} /></details>}
+  </section>;
 }
