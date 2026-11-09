@@ -21,6 +21,7 @@ IPS hiện tự động trong profile GET `/vulnerabilities/xss_r/?...` có dấ
 - [Báo cáo hoàn chỉnh mới nhất](docs/reports/AHR-IDPS_Bao_Cao.docx): 7 chương, mỗi chương 5 mục; gồm GenTI gốc, OOF, dữ liệu huấn luyện và giới hạn kết quả.
 - [Toàn bộ thuật toán GenTI gốc](docs/GENTI_THUAT_TOAN_GOC.md).
 - [Vận hành tự động và giải thích các màn hình](docs/GENTI_AUTOMATIC_IPS.md).
+- [Khởi tạo Suricata, Falco, Wazuh và ảnh bộ luật có sẵn](docs/SENSOR_INITIALIZATION.md).
 - [Paper GenTI gốc](https://arxiv.org/abs/2606.05844).
 
 ## Kiến trúc toàn bộ hệ thống

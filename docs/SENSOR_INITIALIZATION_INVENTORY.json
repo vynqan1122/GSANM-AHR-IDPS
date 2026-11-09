@@ -1,0 +1,380 @@
+{
+  "captured_at": "2026-11-09T21:05:13.630063+07:00",
+  "source": "Live Docker containers; file counts are definitions, not enabled rule counts",
+  "suricata": {
+    "state": "running",
+    "health": "healthy",
+    "image_id": "sha256:581dca6c8cc8a8a2fafd3fff33368573b547b7600a22b21a18866da05727508f",
+    "started_at": "2026-11-09T13:50:34.523840501Z",
+    "ruleset_stats": {
+      "message": [
+        {
+          "id": 0,
+          "rules_loaded": 1,
+          "rules_failed": 0,
+          "rules_skipped": 0
+        }
+      ],
+      "return": "OK"
+    },
+    "base.rules": 1,
+    "generated.rules": 0,
+    "shadow.rules": 0
+  },
+  "falco": {
+    "state": "running",
+    "health": "healthy",
+    "image_id": "sha256:85ad8559039c97f40d71f1491ef6a0d7c613f7ae9a530fea0a415a1644c09eb1",
+    "started_at": "2026-11-09T13:50:34.528008195Z",
+    "/etc/falco/falco_rules.yaml": {
+      "rule_definitions": 25,
+      "macros": 87,
+      "lists": 49
+    },
+    "/etc/falco/falco_rules.local.yaml": {
+      "rule_definitions": 0,
+      "macros": 0,
+      "lists": 0
+    },
+    "/etc/falco/rules.d/90-ahr-idps.yaml": {
+      "rule_definitions": 6,
+      "macros": 2,
+      "lists": 2
+    },
+    "/etc/falco/rules.d/99-generated-rules.yaml": {
+      "rule_definitions": 0,
+      "macros": 0,
+      "lists": 0
+    },
+    "compiled_configuration": {
+      "rules": 31,
+      "enabled": 31,
+      "enabled_AHR": 6
+    }
+  },
+  "wazuh-manager": {
+    "state": "running",
+    "health": "healthy",
+    "image_id": "sha256:c364ef100ba40d501537b1668a5a72bba4c4fbcf39bbef6a02123ff221fc40d0",
+    "started_at": "2026-11-09T13:59:27.546596562Z",
+    "builtin_inventory": {
+      "files": 168,
+      "rule_definitions": 4512,
+      "excluded_file_definitions": 2
+    },
+    "/var/ossec/ruleset/rules/0475-suricata_rules.xml": [
+      [
+        "86600",
+        "0"
+      ],
+      [
+        "86601",
+        "3"
+      ],
+      [
+        "86602",
+        "0"
+      ],
+      [
+        "86603",
+        "0"
+      ],
+      [
+        "86604",
+        "0"
+      ]
+    ],
+    "/var/ossec/ruleset/rules/0455-docker_rules.xml": [
+      [
+        "86000",
+        "0"
+      ],
+      [
+        "86001",
+        "1"
+      ],
+      [
+        "86002",
+        "1"
+      ],
+      [
+        "86003",
+        "3"
+      ],
+      [
+        "86004",
+        "3"
+      ],
+      [
+        "86005",
+        "4"
+      ],
+      [
+        "86006",
+        "4"
+      ]
+    ],
+    "/var/ossec/ruleset/rules/0560-docker_integration_rules.xml": [
+      [
+        "87900",
+        "0"
+      ],
+      [
+        "87901",
+        "3"
+      ],
+      [
+        "87902",
+        "5"
+      ],
+      [
+        "87903",
+        "3"
+      ],
+      [
+        "87904",
+        "3"
+      ],
+      [
+        "87905",
+        "3"
+      ],
+      [
+        "87906",
+        "3"
+      ],
+      [
+        "87907",
+        "3"
+      ],
+      [
+        "87908",
+        "5"
+      ],
+      [
+        "87909",
+        "3"
+      ],
+      [
+        "87910",
+        "3"
+      ],
+      [
+        "87911",
+        "3"
+      ],
+      [
+        "87912",
+        "0"
+      ],
+      [
+        "87913",
+        "3"
+      ],
+      [
+        "87914",
+        "7"
+      ],
+      [
+        "87915",
+        "3"
+      ],
+      [
+        "87916",
+        "5"
+      ],
+      [
+        "87917",
+        "3"
+      ],
+      [
+        "87918",
+        "3"
+      ],
+      [
+        "87919",
+        "3"
+      ],
+      [
+        "87920",
+        "3"
+      ],
+      [
+        "87921",
+        "7"
+      ],
+      [
+        "87922",
+        "3"
+      ],
+      [
+        "87923",
+        "5"
+      ],
+      [
+        "87924",
+        "7"
+      ],
+      [
+        "87925",
+        "3"
+      ],
+      [
+        "87926",
+        "3"
+      ],
+      [
+        "87927",
+        "0"
+      ],
+      [
+        "87928",
+        "3"
+      ],
+      [
+        "87929",
+        "4"
+      ],
+      [
+        "87930",
+        "3"
+      ],
+      [
+        "87931",
+        "5"
+      ],
+      [
+        "87932",
+        "3"
+      ],
+      [
+        "87933",
+        "3"
+      ],
+      [
+        "87934",
+        "3"
+      ],
+      [
+        "87935",
+        "3"
+      ],
+      [
+        "87936",
+        "0"
+      ],
+      [
+        "87937",
+        "3"
+      ],
+      [
+        "87938",
+        "5"
+      ],
+      [
+        "87939",
+        "0"
+      ],
+      [
+        "87940",
+        "3"
+      ],
+      [
+        "87941",
+        "3"
+      ],
+      [
+        "87942",
+        "0"
+      ],
+      [
+        "87943",
+        "3"
+      ],
+      [
+        "87944",
+        "3"
+      ],
+      [
+        "87945",
+        "3"
+      ],
+      [
+        "87946",
+        "3"
+      ],
+      [
+        "87947",
+        "3"
+      ],
+      [
+        "87948",
+        "0"
+      ],
+      [
+        "87949",
+        "3"
+      ],
+      [
+        "87950",
+        "3"
+      ],
+      [
+        "87951",
+        "3"
+      ],
+      [
+        "87952",
+        "3"
+      ],
+      [
+        "87953",
+        "3"
+      ],
+      [
+        "87954",
+        "0"
+      ],
+      [
+        "87955",
+        "3"
+      ],
+      [
+        "87956",
+        "3"
+      ],
+      [
+        "87957",
+        "5"
+      ],
+      [
+        "87958",
+        "3"
+      ]
+    ],
+    "/var/ossec/etc/rules/ahr_falco_rules.xml": [
+      [
+        "100100",
+        "5"
+      ],
+      [
+        "100101",
+        "8"
+      ],
+      [
+        "100102",
+        "12"
+      ]
+    ],
+    "/var/ossec/etc/rules/local_rules.xml": [
+      [
+        "100001",
+        "5"
+      ]
+    ],
+    "api": {
+      "binding": "127.0.0.1:55000",
+      "unauthenticated_https_status": 401
+    }
+  }
+}
