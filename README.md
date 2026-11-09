@@ -23,6 +23,12 @@ IPS hiện tự động trong profile GET `/vulnerabilities/xss_r/?...` có dấ
 - [Vận hành tự động và giải thích các màn hình](docs/GENTI_AUTOMATIC_IPS.md).
 - [Paper GenTI gốc](https://arxiv.org/abs/2606.05844).
 
+## Kiến trúc toàn bộ hệ thống
+
+![Kiến trúc AHR-IDPS](docs/AHR_IDPS_Kien_Truc_Toan_He_Thong.png)
+
+## Thuật toán GenTI
+
 ![Thuật toán GenTI](docs/GenTI_Thuat_Toan.png)
 
 ## Chuẩn bị trên Windows
