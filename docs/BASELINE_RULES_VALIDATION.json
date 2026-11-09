@@ -1,0 +1,85 @@
+{
+  "measured_at": "2026-11-09T21:57:41.591673+07:00",
+  "origin": "maintained AHR baseline; not GenTI model output; no human-review claim",
+  "added_rules": {
+    "suricata": 32,
+    "falco": 10,
+    "wazuh": 28,
+    "total": 70
+  },
+  "loaded": {
+    "suricata_rules": 33,
+    "suricata_failed": 0,
+    "falco_enabled": 41,
+    "falco_AHR": 16,
+    "wazuh_AHR": 31
+  },
+  "checks": {
+    "suricata": {
+      "engine": "Suricata 8.0.6",
+      "cases": 130,
+      "positive_controls": 33,
+      "benign_controls": 33,
+      "scope_controls": 64,
+      "negative_controls": 97,
+      "http_transactions": 130,
+      "passed": true,
+      "scope": "Synthetic controlled PCAP, not an independent attack dataset"
+    },
+    "falco": {
+      "engine": "Falco 0.44.1 modern eBPF live syscall capture",
+      "passed": true,
+      "cases": 13,
+      "positive_controls": 10,
+      "benign_controls": 3,
+      "scope": "Controlled DVWA process, file and local socket fixtures; no outbound connections, no file contents from credentials, no real Docker API access"
+    },
+    "wazuh": {
+      "engine": "Wazuh 4.14.7 modern wazuh-logtest using the deployed rule configuration",
+      "cases": 118,
+      "passed": true,
+      "correlation": [
+        {
+          "rule_id": 100250,
+          "matched_steps": [
+            5
+          ]
+        },
+        {
+          "rule_id": 100251,
+          "matched_steps": [
+            5
+          ]
+        },
+        {
+          "rule_id": 100252,
+          "matched_steps": [
+            5
+          ]
+        }
+      ],
+      "scope": "Offline logtest fixtures; does not inject alerts into the production stream"
+    }
+  },
+  "live_falco_to_wazuh": {
+    "observed_new_mapping_ids": [
+      100116,
+      100117,
+      100118,
+      100119,
+      100120,
+      100121,
+      100122,
+      100123,
+      100124,
+      100125
+    ],
+    "count": 10
+  },
+  "scope": "IDS alert rules. Controlled fixtures are not independent detection-rate benchmarks and do not validate new IPS profiles.",
+  "files": {
+    "sensors/suricata/rules/ahr-web.rules": "416eadf30f3a04594a67022c6d630f8e27744528a3fbdbbffd327e129dcd68fa",
+    "sensors/falco/falco_rules.local.yaml": "62441fb1648e743e4e56b4095aff8a9709034da224f002b27840d076a307cc63",
+    "sensors/wazuh/rules/ahr_falco_rules.xml": "c0c60698068f49905f9caf7dd4db6c8296d7a106d204ba537e28902c32a0711b"
+  }
+}

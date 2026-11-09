@@ -1,3 +1,5 @@
+> Các số liệu và ảnh dưới đây ghi lại phiên khởi tạo trước khi mở rộng baseline. Bộ đang chạy và kết quả kiểm chứng mới nhất nằm tại [Danh mục luật nền](BASELINE_RULES.md).
+
 # Khởi tạo Suricata Falco và Wazuh
 
 **Khởi tạo cảm biến và phân loại các quy tắc có sẵn**

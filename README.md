@@ -16,6 +16,8 @@ Hệ thống lab giám sát và bảo vệ DVWA, tích hợp cảm biến, pipel
 
 IPS hiện tự động trong profile GET `/vulnerabilities/xss_r/?...` có dấu hiệu `<script` sau chuẩn hóa. Rule ngoài profile được giữ lại và cảnh báo; chưa có Suricata NFQUEUE inline hay chặn toàn mạng. Trạng thái Active không thay cho evidence chặn thực tế: cần phản hồi gateway 403, rule hash và `applied=true`.
 
+**Bộ luật nền đang nạp:** 33 Suricata, 41 Falco enabled, 31 luật AHR trong Wazuh. [Danh mục và kiểm chứng](docs/BASELINE_RULES.md). Đây là luật IDS nền, tách với candidate GenTI.
+
 ## Tài liệu chính
 
 - [Báo cáo hoàn chỉnh mới nhất](docs/reports/AHR-IDPS_Bao_Cao.docx): 7 chương, mỗi chương 5 mục; gồm GenTI gốc, OOF, dữ liệu huấn luyện và giới hạn kết quả.

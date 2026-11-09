@@ -185,5 +185,6 @@ unix-command:
 
 rule-files:
   - base.rules
+  - ahr-web.rules
   - generated.rules
   - shadow.rules

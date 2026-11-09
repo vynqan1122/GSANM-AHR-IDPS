@@ -16,3 +16,8 @@ fi
 
 install -o root -g wazuh -m 0640 "$secret" "$target"
 
+# The persistent etc volume otherwise keeps an older copy across restarts.
+rule_source=/wazuh-config-mount/etc/rules/ahr_falco_rules.xml
+[[ -s "$rule_source" ]] || { printf 'Missing maintained AHR rules: %s\n' "$rule_source" >&2; exit 1; }
+install -o root -g wazuh -m 0640 "$rule_source" /var/ossec/etc/rules/ahr_falco_rules.xml
+
