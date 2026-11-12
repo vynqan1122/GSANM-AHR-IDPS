@@ -61,33 +61,15 @@ Rule vẫn mang action Suricata `alert`. Ngăn chặn xảy ra tại gateway d�
 - Sinh rule bận/lỗi: giữ Candidate hoặc đợi, ghi `auto-generation-failed`, thử lại sau 30 giây. Khóa tự động bao trùm review + sinh rule có hạn 1.320 giây; tiến trình bị dừng đột ngột có thể phải chờ khóa tự hết. Không xóa khóa khi chưa xác định model đã ngừng công việc cũ.
 - Sau khi khởi động lại worker, vòng kiểm tra tiếp tục. Nếu thay model, rule có artifact khác không được tự chấp nhận; cần receipt và chu kỳ mới.
 
-## Tái lập kiểm thử và lưu hồ sơ
+## Hồ sơ nghiệm thu và lưu kết quả
 
-```powershell
-python scripts/test_genti_automation.py --output output/acceptance/genti-ips-<moc-thoi-gian-moi>
-```
+Kết quả vận hành mới nhất được tổng hợp tại [Kết quả hệ thống chính](LATEST_SYSTEM_RESULTS.md). Bộ mã công khai giữ cổng kiểm định native, startup smoke test và worker vì đây là thành phần vận hành bắt buộc. Các script pentest, benchmark và nghiệm thu độc lập cùng raw log/PCAP được giữ tại máy nghiên cứu, không nằm trong bản bàn giao GitHub.
 
-Chọn thư mục đầu ra mới; script không ghi đè hồ sơ cũ. Script gửi request thật tới DVWA lab, có thể bật tự động và để rule Active trong lease sau khi hoàn tất. Không chạy khi đang rebuild/recreate backend. Đây không phải công cụ pentest máy bên ngoài.
-
-```powershell
-python scripts/run_system_acceptance.py --output output/acceptance/system-<moc-thoi-gian-moi>
-```
-
-Lệnh thứ hai kiểm tra stack, API, UI build, model và regression; không thay thế phép thử IPS ở lệnh đầu.
-
-Kiểm tra thêm 24 biến thể HTTP và PCAP Suricata trên cùng nội dung rule đang chạy:
-
-```powershell
-.venv-genti\Scripts\python.exe scripts/test_genti_activity_matrix.py --output output/acceptance/activity-<moc-thoi-gian-moi>
-```
-
-Bộ này đối chiếu 12 URI khớp và 12 đối chứng: hoa/thường, percent encoding một/hai lớp, chuỗi gần giống, method POST/HEAD và endpoint ngoài phạm vi. Đồng thời kiểm tra tiến trình Shadow của mọi rule, trạng thái Candidate, thao tác lỗi thời và endpoint nội bộ không công khai. Đây là kiểm thử hành vi của chữ ký `<script`, không chứng minh phát hiện mọi XSS: ví dụ `<img>` ngoài chữ ký là đối chứng phạm vi, không phải mẫu vô hại về an ninh.
-
-Hồ sơ: `output/acceptance/*/summary.json`, `output/genti-self-test/<startup_id>/report.json`, `output/genti-self-test/automation/<rule_id>-<moc-thoi-gian>/receipt.json`, PCAP và `rule.rules`. Giữ cả lượt thất bại để biết vì sao chu kỳ dừng.
+Hồ sơ cục bộ: `output/deployment-local-20261112/`, `output/active-rules-20261112/`, `output/genti-self-test/<startup_id>/report.json` và biên nhận automation. Giữ cả lượt thất bại; kết quả của startup ID hoặc artifact khác không chứng nhận cho lượt chạy hiện tại.
 
 ## Đọc kết quả cho đúng
 
-137.242 event telemetry là dữ liệu hệ thống; corpus SFT là 2.544 cặp với 1.824 cặp train và ba split 240. Số event không thay thế số cặp train. Corpus có 0 dòng được người phê duyệt. Chỉ số 50/50 được tính trên case tổng hợp có kiểm soát, không chứng minh FPR thực địa hay phát hiện zero-day.
+137.242 event telemetry là dữ liệu hệ thống; corpus fine-tune cục bộ mới gồm 50.000 prompt, với 35.856 train, 4.704 validation, 4.736 test và 4.704 unknown-test. Các prompt tăng cường dựa trên 1.696 rule tham chiếu khác nhau; không gọi 50.000 prompt là 50.000 rule độc lập. Số event không thay thế số cặp train. Corpus có 0 dòng được người phê duyệt. Chỉ số 50/50 được tính trên case tổng hợp có kiểm soát, không chứng minh FPR thực địa hay phát hiện zero-day.
 
 Muốn mở rộng SQLi, command injection, file access hoặc POST/body cần thêm profile có giới hạn rõ, corpus riêng và kiểm thử native/đối chiếu gateway tương ứng. Muốn IPS mạng cần triển khai đường inline/NFQUEUE hoặc firewall có kiểm chứng riêng; không dùng kết quả HTTP này thay thế.
 

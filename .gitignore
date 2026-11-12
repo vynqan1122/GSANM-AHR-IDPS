@@ -53,7 +53,7 @@ llm-system/.venv-http/
 llm-system/artifacts/
 .venv-genti/
 
-# Keep model weights and operational evidence outside source control
+# Model artifacts and independent acceptance suites stay local.
 *.gguf
 *.safetensors
 *.pt

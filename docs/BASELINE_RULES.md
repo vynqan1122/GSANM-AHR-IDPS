@@ -80,7 +80,9 @@ Các luật chỉ theo dõi image DVWA. Tool launch là dấu hiệu cần đi�
 
 Luật cảm biến được nạp từ `sensors/suricata/rules/ahr-web.rules`, `sensors/falco/falco_rules.local.yaml` và `sensors/wazuh/rules/ahr_falco_rules.xml`. Sửa file nguồn rồi kiểm chứng trước khi restart cảm biến. Wazuh startup đồng bộ luật AHR vào volume etc để tránh giữ bản cũ sau restart; chỉnh trực tiếp file bên trong container sẽ bị thay bằng file nguồn khi khởi động lại.
 
-Luật nền cảm biến hiện chưa tự nhập vào registry Candidate của dashboard. Xem SID/tên luật trong Sự kiện hoặc log cảm biến; tab Candidate dành cho quy trình sinh/kiểm chứng của ứng dụng. Không thay đổi trạng thái Candidate để giả lập việc bật/tắt một luật file cảm biến.
+Ngày 12/11/2026, 32 chữ ký Suricata được đối chiếu với file thực tế trong container, kiểm parser và replay lại 130 trường hợp trước khi đồng bộ vào registry Active với ID `suricata-9000101`–`suricata-9000132`, nguồn `sensor`, origin `sensor_baseline`. Chúng là 32 luật IDS khác nhau đang được cảm biến nạp, không phải 32 rule AI hay 32 bộ lọc IPS. Luật probe SID 9000001 không được tính vào danh mục bảo vệ này. Falco và Wazuh vẫn quản lý theo cấu hình cảm biến.
+
+Trên dashboard, chọn **Quản lý Rules → Active**, tìm `suricata-` để xem luật IDS nền hoặc `genti-` để xem rule model. Cột **Thực thi IPS** phân biệt chặn HTTP với phát hiện/cảnh báo. Các luật file cảm biến không thể bật/tắt bằng thao tác chỉ đổi registry: cần sửa file nguồn, kiểm định và nạp lại Suricata, rồi đối chiếu lại registry. Trạng thái Active là kết quả đối chiếu lúc đồng bộ, không phải phép đo liên tục trạng thái cảm biến. Biên nhận mới nằm trong `output/active-rules-20261112/`.
 
 Sau khi bật backend và pipeline, sự kiện cảm biến mới được thu thập theo checkpoint như bình thường. Lượt triển khai này không bật model GenTI, không thay trọng số, không tự cấp Active cho candidate và không bật thêm profile chặn ngoài GET XSS đã kiểm soát.
 

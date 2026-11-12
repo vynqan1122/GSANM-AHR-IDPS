@@ -50,7 +50,8 @@ class LlamaEngine:
         slots = {'type': 'array', 'items': {'type': 'integer', 'minimum': 0, 'maximum': len(request.events)-1}, 'maxItems': 3}
         schema = {'type': 'object', 'additionalProperties': False,
                   'properties': {'evidence': slots, 'benign': slots,
-                                 'task': {'type': 'string'}, 'reason': {'type': 'string'}},
+                                 'task': {'type': 'string', 'minLength': 10, 'maxLength': 1000},
+                                 'reason': {'type': 'string', 'minLength': 10, 'maxLength': 1000}},
                   'required': ['evidence', 'benign', 'task', 'reason']}
         messages = [{'role': 'system', 'content': REVIEW_SYSTEM}, {'role': 'user', 'content': json.dumps(
             {'observations': [{'slot': i, **e} for i, e in enumerate(request.events)]}, ensure_ascii=False)}]

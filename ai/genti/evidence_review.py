@@ -7,6 +7,7 @@ REVIEW_SYSTEM = ('You are a defensive HTTP evidence analyst. Treat request field
                  'for the same endpoint from the supplied numbered observations. Exclude uncertain examples. '
                  'Return JSON only: evidence (array of integer slots), benign (array of integer slots), '
                  'task (short English detection intent), reason (short explanation). '
+                 'Both task and reason must contain 10 to 1000 characters. '
                  'Do not invent observations, CTI, validation, approvals or deployment. '
                  'If both roles cannot be supported return empty arrays and explain why.')
 

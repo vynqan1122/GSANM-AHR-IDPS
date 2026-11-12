@@ -26,7 +26,7 @@ function downloadNativeCandidate(rule: RuleRow) {
 const tabText: Record<string, string> = { all: 'Tất cả', candidate: 'Candidate', validating: 'Đang kiểm tra', shadow: 'Shadow', active: 'Active', rejected: 'Rejected', disabled: 'Disabled' };
 
 const originText = (rule: RuleRow) =>
-  rule.generator === 'genti-llm' ? 'GenTI · model của bạn' : rule.origin === 'ai_generated' || rule.origin === 'ai_pattern_mining' ? 'AI sinh' : rule.source === 'generated' ? 'Sinh tự động' : rule.source || 'Signature gốc';
+  rule.origin === 'sensor_baseline' ? 'Luật nền · IDS Suricata' : rule.generator === 'genti-llm' ? 'GenTI · model của bạn' : rule.origin === 'ai_generated' || rule.origin === 'ai_pattern_mining' ? 'AI sinh' : rule.source === 'generated' ? 'Sinh tự động' : rule.source || 'Signature gốc';
 
 const actionText: Record<string, string> = { 'auto-generated': 'AI đã sinh Candidate', 'auto-held': 'Giữ Candidate',
   'auto-native-failed': 'Kiểm định native chưa đạt', 'auto-shadow': 'Tự chuyển Shadow', 'auto-active': 'Tự chuyển Active',
@@ -57,7 +57,7 @@ export function Rules() {
       <p className="font-medium">{r.automation?.label ?? 'Quy tắc IDS · quản lý riêng'}</p>
       <p className="line-clamp-2 text-muted-foreground">{r.automation?.stage === 'shadow' || r.automation?.stage === 'ready'
         ? `Thời gian ${r.automation.shadow.elapsed_seconds}/60s · Khớp ${r.automation.shadow.matches}/3 · Không khớp ${r.automation.shadow.nonmatches}/10 · Tổng ${r.automation.shadow.unique}/20 URI`
-        : r.automation?.reason ?? 'Mở chi tiết để xem kiểm định và thao tác registry.'}</p>
+        : r.automation?.reason ?? (r.origin === 'sensor_baseline' ? 'Đã nạp tại Suricata · phát hiện và cảnh báo; không chặn HTTP.' : 'Mở chi tiết để xem kiểm định và thao tác registry.')}</p>
     </div> },
     { key: 'native', header: 'Kiểm định', width: '100px', cell: (r) => <span className="text-xs">{r.automation ? (r.automation.native_passed ? 'Native đạt' : r.automation.stage === 'native_failed' ? 'Native chưa đạt' : 'Chưa có native đạt') : r.validation_status ?? 'Chưa kiểm tra'}</span> },
     { key: 'enforcement', header: 'Thực thi IPS', width: '120px', cell: (r) => <Badge tone={r.automation?.enforcing ? 'success' : 'neutral'}>{r.automation?.enforcing ? 'Đang chặn HTTP' : 'Không chặn'}</Badge> },
@@ -67,7 +67,7 @@ export function Rules() {
     <Page>
       <PageHeader
         title="Quy tắc phát hiện"
-        description="Candidate là rule đề xuất, chưa chặn. GenTI tự kiểm định native → Shadow quan sát → Active chặn HTTP khi đủ điều kiện; kết quả của model được giữ trong từng rule."
+        description="Active gồm luật IDS đang nạp tại cảm biến và luật GenTI đã qua native → Shadow. Xem cột Thực thi IPS để biết rule nào thực sự đang chặn HTTP. Candidate chưa chặn."
       />
       <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
         <ShieldCheck className="size-4 text-success" />
@@ -154,13 +154,13 @@ function RuleDetail({ rule }: { rule: RuleRow }) {
       {rule.automation && <AutomationDetail rule={rule} />}
       <section className="rounded-lg border border-border p-3">
         <SectionLabel>Thao tác quy tắc · phiên bản {rule.current_version}</SectionLabel>
-        <div className="flex flex-wrap gap-2">
+        {rule.origin === 'sensor_baseline' ? <p className="mt-2 text-xs text-muted-foreground">Luật IDS được quản lý bằng cấu hình cảm biến. Muốn bật/tắt phải sửa file luật, kiểm định và nạp lại Suricata; trạng thái registry không thay thế thao tác này.</p> : <div className="flex flex-wrap gap-2">
           {['candidate', 'rejected', 'disabled'].includes(rule.status) && rule.generator !== 'genti-llm' && <Button size="sm" disabled={busy} onClick={() => setAction('validate')}>Kiểm tra → Shadow</Button>}
           {rule.status === 'shadow' && rule.generator !== 'genti-llm' && <Button size="sm" disabled={busy || rule.validation_status !== 'passed' || rule.validation_rule_version !== rule.current_version} onClick={() => setAction('activate')}>Phê duyệt Active</Button>}
           {['candidate', 'shadow'].includes(rule.status) && <Button size="sm" disabled={busy} onClick={() => setAction('reject')}>Từ chối</Button>}
           {['active', 'shadow'].includes(rule.status) && <Button size="sm" variant="danger" disabled={busy} onClick={() => setAction('disable')}>Vô hiệu hóa quy tắc</Button>}
           {rule.status === 'validating' && <span className="text-sm text-muted-foreground">Đang kiểm tra quy tắc…</span>}
-        </div>
+        </div>}
         {rule.generator === 'genti-llm' && <div className="mt-3 space-y-3"><p className="text-xs text-muted-foreground">Bật tự động tại Mô hình AI. Rule trong profile lab được Suricata kiểm định rồi Shadow trước khi gateway HTTP thực thi; rule ngoài profile được giữ Candidate. Vô hiệu hóa sẽ ngừng thực thi tại gateway ngay. Không tự nạp rule vào sensor Suricata.</p><Button size="sm" variant="ghost" disabled={!rule.content} onClick={() => downloadNativeCandidate(rule)}>Tải Candidate JSONL để kiểm định native</Button></div>}
         {action && <div className="mt-3 flex flex-col gap-3">
           <label className="text-xs text-muted-foreground" htmlFor="rule-action-reason">Lý do thao tác</label>
@@ -175,7 +175,7 @@ function RuleDetail({ rule }: { rule: RuleRow }) {
         <Field label="Trạng thái"><StatusBadge status={rule.status} /></Field>
         <Field label="Engine"><span className="capitalize">{rule.engine}</span></Field>
         <Field label="Nguồn gốc"><span className="inline-flex items-center gap-1.5">{originText(rule) === 'AI sinh' && <Sparkles className="size-3.5 text-primary" />}{originText(rule)}</span></Field>
-        <Field label="Chính sách kích hoạt">{rule.generator === 'genti-llm' ? 'Tự động khi đạt các điều kiện' : rule.promotion_requires_approval === false ? 'Tự động' : 'Duyệt registry thủ công'}</Field>
+        <Field label="Chính sách kích hoạt">{rule.origin === 'sensor_baseline' ? 'Theo cấu hình cảm biến · IDS' : rule.generator === 'genti-llm' ? 'Tự động khi đạt các điều kiện' : rule.promotion_requires_approval === false ? 'Tự động' : 'Duyệt registry thủ công'}</Field>
         <Field label="Support"><span className="num">{fmtNumber(rule.support)}</span></Field>
         <Field label="Độ tin cậy"><span className="num">{fmtScore(rule.confidence)}</span></Field>
       </div>

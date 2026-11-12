@@ -31,6 +31,8 @@ class RuntimePolicy(BaseModel):
 
 
 def require_transition(rule: dict, request: RuleAction) -> str:
+    if rule.get('origin') == 'sensor_baseline':
+        raise HTTPException(409, 'Luật nền đang nạp trực tiếp tại cảm biến Suricata. Cần sửa cấu hình, kiểm định và nạp lại cảm biến; thao tác registry không bật/tắt được luật này.')
     if rule['status'] != request.expected_status or rule['current_version'] != request.expected_version:
         raise HTTPException(409, 'Quy tắc đã thay đổi. Tải lại trước khi thao tác.')
     allowed = {

@@ -18,9 +18,15 @@ IPS hiện tự động trong profile GET `/vulnerabilities/xss_r/?...` có dấ
 
 **Bộ luật nền đang nạp:** 33 Suricata, 41 Falco enabled, 31 luật AHR trong Wazuh. [Danh mục và kiểm chứng](docs/BASELINE_RULES.md). Đây là luật IDS nền, tách với candidate GenTI.
 
+**Bản chính ngày 12/11/2026:** Qwen2.5-Coder-1.5B-Instruct fine-tune cục bộ, GGUF Q4_K_M. Toàn lượt train đã hoàn tất tập train; checkpoint stage 3 được chọn theo validation. Corpus gồm 50.000 prompt, trong đó 35.856 dòng train; không đồng nhất số prompt với số rule chuẩn khác nhau. Artifact runtime: `ecc4941e369a49a2833907a208029245e183708234ee2e21e4d18b3ddca96697`.
+
+Lượt nghiệm thu model chính đạt 12 bước sinh rule → native → Shadow → Active → chặn gateway và 24 trường hợp method/encoding/phạm vi. Native 50 dương + 50 lành và các phép thử này là control tổng hợp, chưa phải DR/FPR độc lập. Dashboard đã đồng bộ **32 luật IDS nền vào Active**; cùng rule GenTI đang thực thi tại thời điểm nghiệm thu là 33 Active. Số Active thay đổi theo thời hạn của rule GenTI; xem cột **Thực thi IPS**, không dùng tổng Active làm số luật chặn.
+
 ## Tài liệu chính
 
 - [Báo cáo hoàn chỉnh mới nhất](docs/reports/AHR-IDPS_Bao_Cao.docx): 7 chương, mỗi chương 5 mục; gồm GenTI gốc, OOF, dữ liệu huấn luyện và giới hạn kết quả.
+- [Báo cáo PDF](docs/reports/AHR-IDPS_Bao_Cao.pdf).
+- [Kết quả triển khai và kiểm chứng mới nhất](docs/LATEST_SYSTEM_RESULTS.md).
 - [Toàn bộ thuật toán GenTI gốc](docs/GENTI_THUAT_TOAN_GOC.md).
 - [Vận hành tự động và giải thích các màn hình](docs/GENTI_AUTOMATIC_IPS.md).
 - [Khởi tạo Suricata, Falco, Wazuh và ảnh bộ luật có sẵn](docs/SENSOR_INITIALIZATION.md).
