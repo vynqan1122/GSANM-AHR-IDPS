@@ -7,7 +7,6 @@
 - Qwen/Qwen2.5-Coder-1.5B-Instruct; LoRA/NF4 khi huấn luyện, GGUF Q4_K_M khi chạy CPU trong Docker.
 - Corpus 50.000 prompt tăng cường, 1.696 rule tham chiếu khác nhau, 53 họ. Chia train 35.856, validation 4.704, test 4.736, unknown-test 4.704. Chưa có dòng được chuyên gia phê duyệt.
 - Lượt chạy đã hoàn tất stage 4 trên toàn tập train. Chọn stage 3 theo validation loss 0,14343925, so với 0,32502496 của stage 4. Adapter được chọn đã qua 300 bước optimizer tích lũy / 600 lượt trình bày mẫu; không được mô tả chính adapter này đã đi hết epoch train.
-- Artifact runtime: `ecc4941e369a49a2833907a208029245e183708234ee2e21e4d18b3ddca96697`.
 - Model chính đặt tại `experiments/genti/main`. Bản trước được giữ riêng để khôi phục, không đưa vào Git.
 
 ## Luồng sinh rule và IPS
@@ -24,15 +23,18 @@ IPS ở đây là Nginx `auth_request` cho GET `/vulnerabilities/xss_r/?...` ch�
 
 Đối chiếu lúc 18:43 ngày 12/11/2026 (UTC+7): **33 quy tắc Active trong registry**, gồm **32 chữ ký IDS nền Suricata** và **1 rule GenTI đang chặn HTTP**. Suricata thực nạp 33 luật: 32 chữ ký bảo vệ và 1 probe bắt gói. Probe không được nhập vào danh mục 32 luật bảo vệ. Không nhân bản cùng chữ ký để tăng số lượng.
 
-32 chữ ký nền có SID 9000101–9000132, gồm SQLi, XSS, file inclusion, command injection, upload và reconnaissance. File trong container khớp hash nguồn; parser đạt, 130 case native replay lại đạt và socket runtime báo 0 luật lỗi. Registry dùng nguồn `sensor`, origin `sensor_baseline`, không gắn nhãn AI. Thao tác registry không được giả lập bật/tắt luật file cảm biến; cập nhật phải đi qua cấu hình, kiểm định, nạp lại sensor và đối chiếu registry.
+32 chữ ký nền có SID 9000101–9000132, gồm SQLi, XSS, file inclusion, command injection, upload và reconnaissance. Đã đối chiếu cấu hình trong container với mã nguồn. Parser đạt, 130 ca native replay đạt và socket runtime báo 0 luật lỗi. Registry dùng nguồn `sensor`, origin `sensor_baseline`, không gắn nhãn AI. Thao tác registry không được giả lập bật/tắt luật file cảm biến; cập nhật phải đi qua cấu hình, kiểm định, nạp lại sensor và đối chiếu registry.
 
 Mở **Quản lý Rules → Active**. Tìm `suricata-` để xem luật IDS hoặc `genti-` để xem rule model. Cột **Thực thi IPS** phân biệt chặn thật với cảnh báo. Bản clone mới tự nạp luật IDS qua Compose; snapshot registry 33 Active là dữ liệu tại máy triển khai, không được chèn giả bằng seed cho mọi máy.
 
+## Đối chiếu cảm biến ngày 19/11/2026
+
+Suricata nạp 33 luật với 0 lỗi và 0 luật bị bỏ qua. Falco có 41 luật bật, trong đó 16 luật AHR. Wazuh có 31 định nghĩa AHR và cấu hình qua kiểm tra. [Ảnh và phương pháp đối chiếu](SENSOR_INITIALIZATION.md).
+
 ## Tệp bàn giao và giới hạn
 
-- [Báo cáo Word](reports/AHR-IDPS_Bao_Cao.docx), [PDF](reports/AHR-IDPS_Bao_Cao.pdf): 116 trang, 7 chương × 5 mục, 82 biểu thức toán, 32 hình và 36 bảng. Kết quả đồng bộ registry sau khi xuất báo cáo được cập nhật tại trang này và [danh mục luật nền](BASELINE_RULES.md).
+- [Báo cáo Word](reports/AHR-IDPS_Bao_Cao.docx), [PDF](reports/AHR-IDPS_Bao_Cao.pdf). Bản ngày 19/11 sử dụng bản Word cuối của tác giả và hình triển khai đã cập nhật.
 - [Kiến trúc hệ thống](AHR_IDPS_Kien_Truc_Toan_He_Thong.png), [hướng dẫn vận hành](GENTI_AUTOMATIC_IPS.md).
 - Kiểm hồi quy liên quan registry/lifecycle: 26 test đạt. Dashboard typecheck và production build đạt; 17 container healthy tại lần kiểm cuối.
-- Hồ sơ cục bộ được giữ tại `output/deployment-local-20261112/` và `output/active-rules-20261112/`, gồm cả lượt thất bại trước khi hiệu chỉnh.
 
 Control tổng hợp và tập diagnostic từ corpus chưa thay cho capture độc lập có nhãn; chưa kết luận DR/FPR thực địa, bao phủ zero-day hoặc sẵn sàng production. Không công bố raw log, PCAP, thông tin bí mật, model weights, script pentest hoặc bộ script nghiệm thu độc lập. Các cổng kiểm định native dùng khi vận hành (`ai/genti/self_test.py`, `native_validation.py`, worker) được giữ vì hệ thống cần chúng để chạy.

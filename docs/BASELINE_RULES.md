@@ -86,6 +86,6 @@ Trên dashboard, chọn **Quản lý Rules → Active**, tìm `suricata-` để 
 
 Sau khi bật backend và pipeline, sự kiện cảm biến mới được thu thập theo checkpoint như bình thường. Lượt triển khai này không bật model GenTI, không thay trọng số, không tự cấp Active cho candidate và không bật thêm profile chặn ngoài GET XSS đã kiểm soát.
 
-[Biên bản kiểm chứng và checksum](BASELINE_RULES_VALIDATION.json)
+Xem [ảnh và kết quả đối chiếu tập luật ngày 19/11/2026](SENSOR_INITIALIZATION.md).
 
 Nguồn cú pháp: [Suricata HTTP keywords](https://docs.suricata.io/en/latest/rules/http-keywords.html), [Falco supported fields](https://falco.org/docs/reference/rules/supported-fields/), [Wazuh rule syntax](https://documentation.wazuh.com/current/user-manual/ruleset/ruleset-xml-syntax/rules.html).
