@@ -56,9 +56,7 @@ Giữ `.env` đã có nếu tiếp tục môi trường hiện tại. Khi cài m
 
 ## Nạp model đã fine-tune
 
-Repo không chứa trọng số. Trên máy hiện tại, bundle đã chuyển đổi nằm ở `experiments/genti/main`, gồm `model.gguf`, `genti-manifest.json`, template và các file có checksum. Khi chuyển máy, sao chép nguyên bundle đã kiểm chứng vào đúng thư mục này; không chỉ sao chép một file GGUF.
-
-Nếu chỉ có ZIP Colab chứa merged model, dùng Python trong môi trường có các dependency phù hợp:
+Repo không chứa trọng số. bundle đã chuyển đổi nằm ở `experiments/genti/main`, gồm `model.gguf`, `genti-manifest.json`, template và các file có checksum. Khi chuyển máy, sao chép nguyên bundle đã kiểm chứng vào đúng thư mục này; không chỉ sao chép một file GGUF.
 
 ```powershell
 python scripts/install_genti_bundle.py --help
